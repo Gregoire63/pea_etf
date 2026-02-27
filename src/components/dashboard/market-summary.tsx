@@ -18,7 +18,7 @@ function MarketCard({ index }: { index: MarketIndex }) {
   const isNull = index.price === null;
 
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-card px-4 py-3">
+    <div className="flex items-center justify-between rounded-lg border bg-card px-3 py-2">
       <div>
         <div className="text-xs font-medium text-muted-foreground">{index.label}</div>
         <div className="mt-0.5 text-sm font-semibold font-mono">
@@ -76,7 +76,7 @@ export function MarketSummary() {
 
   if (loading) {
     return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-16 animate-pulse rounded-lg border bg-muted" />
         ))}
@@ -98,7 +98,7 @@ export function MarketSummary() {
           {updatedAt ? `Mis à jour ${updatedAt}` : "Actualiser"}
         </button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {indices.map((idx) => (
           <MarketCard key={idx.symbol} index={idx} />
         ))}

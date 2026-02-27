@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 
-const SESSION_KEY = "pea_user_profile";
+const STORAGE_KEY = "pea_user_profile";
 
 export interface UserProfile {
   birthYear: number;
@@ -18,12 +18,12 @@ export function useUserProfile() {
 
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem(SESSION_KEY);
+      const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         setProfile(JSON.parse(saved) as UserProfile);
       }
     } catch {
-      // sessionStorage non disponible
+      // localStorage non disponible
     }
     setInitialized(true);
   }, []);
@@ -32,18 +32,18 @@ export function useUserProfile() {
   const saveProfile = useCallback((p: UserProfile) => {
     setProfile(p);
     try {
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(p));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
     } catch {
-      // sessionStorage non disponible
+      // localStorage non disponible
     }
   }, []);
 
   const resetProfile = useCallback(() => {
     setProfile(null);
     try {
-      sessionStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
-      // sessionStorage non disponible
+      // localStorage non disponible
     }
   }, []);
 

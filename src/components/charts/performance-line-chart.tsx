@@ -94,6 +94,15 @@ export function PerformanceLineChart({
               : `${Number(value).toFixed(2)} €`,
             labels[String(name)] || String(name),
           ]}
+          contentStyle={{
+            backgroundColor: "var(--card)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            color: "var(--card-foreground)",
+            fontSize: 12,
+          }}
+          labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
+          itemStyle={{ color: "var(--muted-foreground)" }}
         />
         {tickers.length > 1 && <Legend formatter={(v) => labels[String(v)] || String(v)} />}
         {tickers.map((ticker, i) => (

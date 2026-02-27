@@ -153,30 +153,28 @@ export function EtfOverview({ etfs }: { etfs: EtfRankedEntry[] }) {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-1 lg:gap-4">
           {/* Top 5 */}
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-emerald-500" />
-                <CardTitle className="text-sm">Top 5 — Meilleurs 1 an</CardTitle>
+          <Card className="py-3 gap-2 lg:py-6 lg:gap-6">
+            <CardHeader className="px-3 pb-0 lg:px-6 lg:pb-2">
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                <CardTitle className="text-xs leading-tight lg:text-sm">Top 5 — 1 an</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-1 pt-0">
+            <CardContent className="space-y-0 px-2 pb-1 lg:space-y-1 lg:px-6 lg:pb-0">
               {top5.map((e, i) => (
                 <Link
                   key={e.isin}
                   href={`/etf/${e.isin}`}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted/50"
+                  className="flex items-center justify-between rounded px-1.5 py-1 hover:bg-muted/50 lg:rounded-md lg:px-2 lg:py-1.5"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 text-xs text-muted-foreground">{i + 1}.</span>
-                    <span className="text-sm font-medium">{e.ticker}</span>
-                    <span className="hidden text-xs text-muted-foreground sm:block">
-                      {e.shortName}
-                    </span>
+                  <div className="flex items-center gap-1 min-w-0 lg:gap-2">
+                    <span className="w-3 text-[10px] text-muted-foreground shrink-0 lg:w-4 lg:text-xs">{i + 1}.</span>
+                    <span className="text-xs font-medium truncate lg:text-sm">{e.ticker}</span>
+                    <span className="hidden text-xs text-muted-foreground lg:block">{e.shortName}</span>
                   </div>
-                  <span className="font-mono text-sm font-semibold text-emerald-600">
+                  <span className="font-mono text-xs font-semibold text-emerald-600 shrink-0 ml-1 lg:text-sm">
                     {fmtPct(e.return1y)}
                   </span>
                 </Link>
@@ -185,28 +183,26 @@ export function EtfOverview({ etfs }: { etfs: EtfRankedEntry[] }) {
           </Card>
 
           {/* Flop 5 */}
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-red-500" />
-                <CardTitle className="text-sm">Flop 5 — Moins bons 1 an</CardTitle>
+          <Card className="py-3 gap-2 lg:py-6 lg:gap-6">
+            <CardHeader className="px-3 pb-0 lg:px-6 lg:pb-2">
+              <div className="flex items-center gap-1.5">
+                <TrendingDown className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                <CardTitle className="text-xs leading-tight lg:text-sm">Flop 5 — 1 an</CardTitle>
               </div>
             </CardHeader>
-            <CardContent className="space-y-1 pt-0">
+            <CardContent className="space-y-0 px-2 pb-1 lg:space-y-1 lg:px-6 lg:pb-0">
               {flop5.map((e, i) => (
                 <Link
                   key={e.isin}
                   href={`/etf/${e.isin}`}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-muted/50"
+                  className="flex items-center justify-between rounded px-1.5 py-1 hover:bg-muted/50 lg:rounded-md lg:px-2 lg:py-1.5"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 text-xs text-muted-foreground">{i + 1}.</span>
-                    <span className="text-sm font-medium">{e.ticker}</span>
-                    <span className="hidden text-xs text-muted-foreground sm:block">
-                      {e.shortName}
-                    </span>
+                  <div className="flex items-center gap-1 min-w-0 lg:gap-2">
+                    <span className="w-3 text-[10px] text-muted-foreground shrink-0 lg:w-4 lg:text-xs">{i + 1}.</span>
+                    <span className="text-xs font-medium truncate lg:text-sm">{e.ticker}</span>
+                    <span className="hidden text-xs text-muted-foreground lg:block">{e.shortName}</span>
                   </div>
-                  <span className="font-mono text-sm font-semibold text-red-600">
+                  <span className="font-mono text-xs font-semibold text-red-600 shrink-0 ml-1 lg:text-sm">
                     {fmtPct(e.return1y)}
                   </span>
                 </Link>

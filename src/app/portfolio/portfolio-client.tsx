@@ -129,7 +129,10 @@ function ProfileForm({
     : null;
 
   return (
-    <div className="space-y-4">
+    <form
+      onSubmit={(e) => { e.preventDefault(); handleSave(); }}
+      className="space-y-4"
+    >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1">
           <label className="block text-xs font-medium text-muted-foreground">
@@ -208,7 +211,7 @@ function ProfileForm({
 
       <div className="flex items-center gap-2">
         <button
-          onClick={handleSave}
+          type="submit"
           className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Save className="h-3.5 w-3.5" />
@@ -216,6 +219,7 @@ function ProfileForm({
         </button>
         {showCancel && onCancel && (
           <button
+            type="button"
             onClick={onCancel}
             className="rounded-md px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
           >
@@ -228,7 +232,7 @@ function ProfileForm({
         <Info className="h-3 w-3 shrink-0" />
         Données sauvegardées uniquement dans la session de votre navigateur.
       </p>
-    </div>
+    </form>
   );
 }
 
@@ -260,7 +264,8 @@ const ROLE_COLORS = {
   "Satellite":  "bg-muted text-muted-foreground",
 };
 
-const BAR_COLORS  = ["bg-primary", "bg-blue-500", "bg-emerald-500", "bg-amber-400"];
+const BAR_COLORS      = ["bg-primary", "bg-blue-500", "bg-emerald-500", "bg-amber-400"];
+const BAR_TEXT_COLORS = ["text-primary-foreground", "text-white", "text-white", "text-white"];
 const TEXT_COLORS = ["text-primary", "text-blue-600", "text-emerald-600", "text-amber-500"];
 
 function EtfStrategySection({
@@ -331,7 +336,7 @@ function EtfStrategySection({
                 title={`${etf.shortName} — ${etf.weight}%`}
               >
                 {etf.weight >= 15 && (
-                  <span className="text-[10px] font-semibold text-white">{etf.weight}%</span>
+                  <span className={`text-[10px] font-semibold ${BAR_TEXT_COLORS[i % BAR_TEXT_COLORS.length]}`}>{etf.weight}%</span>
                 )}
               </div>
             ))}
@@ -642,8 +647,8 @@ function ProjectionDashboard({
       </div>
 
       {/* ── 4. Graphique — immédiat ────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
+      <Card className="py-3 gap-2 sm:py-6 sm:gap-6">
+        <CardHeader className="px-3 sm:px-6">
           <div className="flex items-center justify-between">
             <CardTitle>Projection PEA</CardTitle>
             <div className="flex gap-1">
@@ -651,7 +656,7 @@ function ProjectionDashboard({
                 <button
                   key={r}
                   onClick={() => setRate(r)}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors sm:px-3 ${
                     rate === r
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:bg-accent"
@@ -663,7 +668,7 @@ function ProjectionDashboard({
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-2 sm:px-6">
           {mounted ? <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
@@ -686,6 +691,15 @@ function ProjectionDashboard({
                   String(name) === "invested" ? "Total versé" : `Scénario ${name}`,
                 ]}
                 labelFormatter={(age) => `${age} ans`}
+                contentStyle={{
+                  backgroundColor: "var(--card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  color: "var(--card-foreground)",
+                  fontSize: 12,
+                }}
+                labelStyle={{ color: "var(--card-foreground)", fontWeight: 600 }}
+                itemStyle={{ color: "var(--muted-foreground)" }}
               />
               <Area
                 type="monotone"

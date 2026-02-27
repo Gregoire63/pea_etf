@@ -192,12 +192,12 @@ export default async function EtfDetailPage({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
         {metrics.map((m, i) => (
           <Card key={i}>
-            <CardContent className="p-3 sm:p-4">
-              <div className="text-[11px] text-muted-foreground sm:text-xs">{m.label}</div>
-              <div className="mt-0.5 text-base font-semibold sm:mt-1 sm:text-lg">{m.value}</div>
+            <CardContent className="p-2 sm:p-4">
+              <div className="text-[10px] leading-tight text-muted-foreground sm:text-xs sm:leading-normal">{m.label}</div>
+              <div className="mt-0.5 text-sm font-semibold leading-tight sm:mt-1 sm:text-base lg:text-lg">{m.value}</div>
             </CardContent>
           </Card>
         ))}

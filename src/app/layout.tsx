@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Navbar } from "@/components/layout/navbar";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
@@ -84,14 +85,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    <html lang="fr" suppressHydrationWarning>
+      <head>
+        {/* Anti-FOUC : applique la classe dark avant le rendu React */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('pea_theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(t!=='light'&&d)){document.documentElement.classList.add('dark');}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <TooltipProvider>
-          <Navbar />
-          <main className="mx-auto max-w-7xl px-4 pt-6 pb-24 sm:pb-8">{children}</main>
-        </TooltipProvider>
+        <ThemeProvider>
+          <TooltipProvider>
+            <Navbar />
+            <main className="mx-auto max-w-7xl px-4 pt-6 pb-24 sm:pb-8">{children}</main>
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
