@@ -18,6 +18,9 @@ export const metadata: Metadata = {
   title: "PEA - Classement ETF",
   description:
     "Classement et comparaison des ETF eligibles PEA en France",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
