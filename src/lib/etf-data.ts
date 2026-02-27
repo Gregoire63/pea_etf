@@ -11,11 +11,20 @@ import { computeScore } from "./scoring";
 import { getCachedEtfs, setCachedEtfs } from "./cache";
 import { BASE_CATALOG, extractIssuer } from "./etf-catalog";
 
+// Évite les appels concurrent à Yahoo Finance si plusieurs composants déclenchent
+// getAllEtfsRanked en parallèle (ex: Suspense boundaries sur la même page)
+let pendingRefresh: Promise<EtfRankedEntry[]> | null = null;
+
 export async function getAllEtfsRanked(): Promise<EtfRankedEntry[]> {
   const cached = getCachedEtfs();
   if (cached) return cached;
 
-  return refreshAllEtfs();
+  if (!pendingRefresh) {
+    pendingRefresh = refreshAllEtfs().finally(() => {
+      pendingRefresh = null;
+    });
+  }
+  return pendingRefresh;
 }
 
 export async function refreshAllEtfs(): Promise<EtfRankedEntry[]> {
@@ -124,10 +133,21 @@ export function getEtfByIsin(etfs: EtfRankedEntry[], isin: string): EtfRankedEnt
   return etfs.find((e) => e.isin === isin);
 }
 
+// Cache des historiques de prix par ticker (TTL 1h)
+const priceCache = new Map<string, { data: PricePoint[]; timestamp: number }>();
+const PRICE_CACHE_MS = 60 * 60 * 1000;
+
 export async function getHistoricalPricesForIsin(isin: string, years: number = 10): Promise<PricePoint[]> {
   const etf = BASE_CATALOG.find((e) => e.isin === isin);
   if (!etf) return [];
 
+  const cached = priceCache.get(etf.yahooTicker);
+  if (cached && Date.now() - cached.timestamp < PRICE_CACHE_MS) {
+    return cached.data;
+  }
+
   const { fetchHistoricalPrices } = await import("./yahoo-finance");
-  return fetchHistoricalPrices(etf.yahooTicker, years);
+  const data = await fetchHistoricalPrices(etf.yahooTicker, years);
+  priceCache.set(etf.yahooTicker, { data, timestamp: Date.now() });
+  return data;
 }

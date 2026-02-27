@@ -1,17 +1,43 @@
 import type React from "react";
-import { getAllEtfsRanked, getEtfByIsin, getHistoricalPricesForIsin } from "@/lib/etf-data";
+import { Suspense } from "react";
+import type { Metadata } from "next";
+import { getAllEtfsRanked, getEtfByIsin } from "@/lib/etf-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
 import { CategoryBadge } from "@/components/dashboard/category-badge";
-import { EtfDetailChart } from "./chart";
+import { PriceChartSection } from "./price-chart-section";
 import { BrokerLinksPanel } from "@/components/etf/broker-links-panel";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ isin: string }>;
+}): Promise<Metadata> {
+  const { isin } = await params;
+  const etfs = await getAllEtfsRanked();
+  const etf = getEtfByIsin(etfs, isin);
+
+  if (!etf) return { title: "ETF introuvable" };
+
+  const perf1y = etf.return1y !== null ? `${(etf.return1y * 100).toFixed(1)}%` : "—";
+  const description = `${etf.name} (${etf.ticker}) — Score ${etf.score.toFixed(0)}/100 · TER ${(etf.ter * 100).toFixed(2)}% · Perf 1 an : ${perf1y}. Analyse complète ETF éligible PEA.`;
+
+  return {
+    title: etf.shortName,
+    description,
+    openGraph: {
+      title: `${etf.shortName} — ETF PEA`,
+      description,
+    },
+  };
+}
 
 function fmt(val: number | null, decimals = 2): string {
   if (val === null) return "—";
@@ -45,8 +71,6 @@ export default async function EtfDetailPage({
       </div>
     );
   }
-
-  const prices = await getHistoricalPricesForIsin(isin, 10);
 
   const metrics: { label: React.ReactNode; value: string }[] = [
     { label: "Prix actuel", value: etf.currentPrice ? `${etf.currentPrice.toFixed(2)} EUR` : "—" },
@@ -200,16 +224,9 @@ export default async function EtfDetailPage({
         </CardContent>
       </Card>
 
-      {prices.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Historique de prix</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <EtfDetailChart prices={prices} ticker={etf.ticker} />
-          </CardContent>
-        </Card>
-      )}
+      <Suspense fallback={<div className="h-80 animate-pulse rounded-lg border bg-muted" />}>
+        <PriceChartSection isin={isin} ticker={etf.ticker} />
+      </Suspense>
 
       <BrokerLinksPanel ticker={etf.ticker} isin={etf.isin} />
     </div>

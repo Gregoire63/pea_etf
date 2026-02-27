@@ -14,10 +14,65 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const BASE_URL = "https://etf.gregoire-raturat.fr";
+
 export const metadata: Metadata = {
-  title: "PEA - Classement ETF",
+  metadataBase: new URL(BASE_URL),
+  title: {
+    template: "%s | PEA ETF",
+    default: "PEA ETF — Classement & Analyse",
+  },
   description:
-    "Classement et comparaison des ETF eligibles PEA en France",
+    "Classement, comparaison et analyse des ETF éligibles PEA en France. Scores composites, performances, frais, ratio de Sharpe et stratégie portfolio personnalisée.",
+  keywords: [
+    "ETF PEA",
+    "plan épargne actions",
+    "ETF France",
+    "MSCI World PEA",
+    "S&P 500 PEA",
+    "investissement bourse",
+    "classement ETF",
+    "Amundi ETF",
+    "analyse ETF",
+    "portefeuille PEA",
+  ],
+  authors: [{ name: "Grégoire Raturat", url: "https://gregoire-raturat.fr" }],
+  creator: "Grégoire Raturat",
+  openGraph: {
+    type: "website",
+    locale: "fr_FR",
+    url: BASE_URL,
+    siteName: "PEA ETF",
+    title: "PEA ETF — Classement & Analyse",
+    description: "Classement et analyse des ETF éligibles PEA en France.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "PEA ETF — Classement & Analyse",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PEA ETF — Classement & Analyse",
+    description: "Classement et analyse des ETF éligibles PEA en France.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
+  alternates: {
+    canonical: BASE_URL,
+  },
   icons: {
     icon: "/favicon.ico",
   },

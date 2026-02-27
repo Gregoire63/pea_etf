@@ -47,7 +47,6 @@ export const BASE_CATALOG: BaseCatalogEntry[] = [
 
   // ── Europe ─────────────────────────────────────────────────────────────────
   { isin: "FR0011550193", yahooTicker: "ETZ.PA",   category: "Europe",   index: "STOXX Europe 600",                    ter: 0.0019, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681042609", yahooTicker: "MSEU.PA",  category: "Europe",   index: "MSCI Europe",                         ter: 0.0015, distribution: "ACC",  replication: "Synthetic", leveraged: false },
 
   // ── Zone Euro ──────────────────────────────────────────────────────────────
   { isin: "LU1681040223", yahooTicker: "CEU.PA",   category: "Eurozone", index: "EURO STOXX 50",                       ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
