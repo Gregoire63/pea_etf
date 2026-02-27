@@ -1,5 +1,7 @@
-import yahooFinance from "yahoo-finance2";
+import YahooFinance from "yahoo-finance2";
 import type { PricePoint } from "@/types/etf";
+
+const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 const BATCH_SIZE = 5;
 const DELAY_MS = 1200;
@@ -10,7 +12,7 @@ function delay(ms: number) {
 
 export async function fetchEtfQuote(yahooTicker: string) {
   try {
-    return await yahooFinance.quote(yahooTicker);
+    return await yf.quote(yahooTicker);
   } catch (error) {
     console.error(`Failed to fetch quote for ${yahooTicker}:`, error);
     return null;
@@ -27,7 +29,7 @@ export async function fetchHistoricalPrices(
     startDate.setFullYear(startDate.getFullYear() - yearsBack);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result: any = await yahooFinance.chart(yahooTicker, {
+    const result: any = await yf.chart(yahooTicker, {
       period1: startDate,
       period2: endDate,
       interval: "1wk",
@@ -48,14 +50,14 @@ export async function fetchHistoricalPrices(
 
 export async function fetchAllEtfQuotes(
   yahooTickers: string[]
-): Promise<Map<string, Awaited<ReturnType<typeof yahooFinance.quote>> | null>> {
-  const results = new Map<string, Awaited<ReturnType<typeof yahooFinance.quote>> | null>();
+): Promise<Map<string, Awaited<ReturnType<typeof yf.quote>> | null>> {
+  const results = new Map<string, Awaited<ReturnType<typeof yf.quote>> | null>();
 
   for (let i = 0; i < yahooTickers.length; i += BATCH_SIZE) {
     const batch = yahooTickers.slice(i, i + BATCH_SIZE);
     const promises = batch.map(async (ticker) => {
       try {
-        const quote = await yahooFinance.quote(ticker);
+        const quote = await yf.quote(ticker);
         results.set(ticker, quote);
       } catch (error) {
         console.error(`Failed to fetch ${ticker}:`, error);

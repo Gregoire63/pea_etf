@@ -1,10 +1,13 @@
+import type React from "react";
 import { getAllEtfsRanked, getEtfByIsin, getHistoricalPricesForIsin } from "@/lib/etf-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
 import { CategoryBadge } from "@/components/dashboard/category-badge";
 import { EtfDetailChart } from "./chart";
+import { BrokerLinksPanel } from "@/components/etf/broker-links-panel";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
@@ -45,21 +48,85 @@ export default async function EtfDetailPage({
 
   const prices = await getHistoricalPricesForIsin(isin, 10);
 
-  const metrics = [
+  const metrics: { label: React.ReactNode; value: string }[] = [
     { label: "Prix actuel", value: etf.currentPrice ? `${etf.currentPrice.toFixed(2)} EUR` : "—" },
-    { label: "TER", value: `${(etf.ter * 100).toFixed(2)}%` },
-    { label: "Encours", value: fmtAum(etf.aum) },
-    { label: "Distribution", value: etf.distribution },
-    { label: "Replication", value: etf.replication },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          TER
+          <HintTooltip content="Total Expense Ratio — frais annuels de gestion déduits automatiquement de la valeur de l'ETF. Plus c'est bas, mieux c'est." />
+        </span>
+      ),
+      value: `${(etf.ter * 100).toFixed(2)}%`,
+    },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          Encours
+          <HintTooltip content="Actifs sous gestion (AUM). Un encours élevé garantit une meilleure liquidité et des spreads bid/ask plus faibles." />
+        </span>
+      ),
+      value: fmtAum(etf.aum),
+    },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          Distribution
+          <HintTooltip content="ACC (Capitalisant) : les dividendes sont réinvestis automatiquement. DIST (Distribuant) : les dividendes vous sont versés." />
+        </span>
+      ),
+      value: etf.distribution,
+    },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          Réplication
+          <HintTooltip content="Physique : l'ETF achète directement les actions de l'indice. Synthétique (Swap) : réplication via des contrats dérivés — nécessaire pour l'éligibilité PEA des indices non-européens (MSCI World, S&P 500…)." />
+        </span>
+      ),
+      value: etf.replication,
+    },
     { label: "Indice", value: etf.index },
-    { label: "YTD", value: fmt(etf.ytdReturn) },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          YTD
+          <HintTooltip content="Year-to-Date — performance depuis le 1er janvier de l'année en cours." />
+        </span>
+      ),
+      value: fmt(etf.ytdReturn),
+    },
     { label: "1 an", value: fmt(etf.return1y) },
     { label: "3 ans (ann.)", value: fmt(etf.return3y) },
     { label: "5 ans (ann.)", value: fmt(etf.return5y) },
     { label: "10 ans (ann.)", value: fmt(etf.return10y) },
-    { label: "Max Drawdown", value: fmt(etf.maxDrawdown) },
-    { label: "Volatilite", value: fmt(etf.volatility1y) },
-    { label: "Sharpe Ratio", value: etf.sharpeRatio !== null ? etf.sharpeRatio.toFixed(2) : "—" },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          Max Drawdown
+          <HintTooltip content="Pire baisse enregistrée depuis un pic historique jusqu'au creux suivant. Mesure le risque maximal de perte en capital." />
+        </span>
+      ),
+      value: fmt(etf.maxDrawdown),
+    },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          Volatilité
+          <HintTooltip content="Volatilité annualisée — écart-type des rendements hebdomadaires × √52. Mesure l'amplitude des variations de prix." />
+        </span>
+      ),
+      value: fmt(etf.volatility1y),
+    },
+    {
+      label: (
+        <span className="flex items-center gap-0.5">
+          Sharpe Ratio
+          <HintTooltip content="Ratio de Sharpe = rendement / volatilité. Mesure la performance ajustée au risque. Un ratio > 1 est considéré bon ; > 2 est excellent." />
+        </span>
+      ),
+      value: etf.sharpeRatio !== null ? etf.sharpeRatio.toFixed(2) : "—",
+    },
   ];
 
   const breakdown = [
@@ -143,6 +210,8 @@ export default async function EtfDetailPage({
           </CardContent>
         </Card>
       )}
+
+      <BrokerLinksPanel ticker={etf.ticker} isin={etf.isin} />
     </div>
   );
 }

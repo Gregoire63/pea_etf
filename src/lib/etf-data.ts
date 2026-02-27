@@ -1,4 +1,3 @@
-import peaEtfCatalog from "@/data/pea-etfs.json";
 import type { PeaEtfCatalogEntry, EtfRankedEntry, PricePoint } from "@/types/etf";
 import { fetchAllEtfQuotes, fetchAllHistoricalPrices } from "./yahoo-finance";
 import {
@@ -10,8 +9,7 @@ import {
 } from "./calculations";
 import { computeScore } from "./scoring";
 import { getCachedEtfs, setCachedEtfs } from "./cache";
-
-const catalog = peaEtfCatalog as PeaEtfCatalogEntry[];
+import { BASE_CATALOG, extractIssuer } from "./etf-catalog";
 
 export async function getAllEtfsRanked(): Promise<EtfRankedEntry[]> {
   const cached = getCachedEtfs();
@@ -21,7 +19,7 @@ export async function getAllEtfsRanked(): Promise<EtfRankedEntry[]> {
 }
 
 export async function refreshAllEtfs(): Promise<EtfRankedEntry[]> {
-  const tickers = catalog.map((e) => e.yahooTicker);
+  const tickers = BASE_CATALOG.map((e) => e.yahooTicker);
 
   const [quotes, allPrices] = await Promise.all([
     fetchAllEtfQuotes(tickers),
@@ -30,10 +28,23 @@ export async function refreshAllEtfs(): Promise<EtfRankedEntry[]> {
 
   const entries: EtfRankedEntry[] = [];
 
-  for (const etf of catalog) {
+  for (const base of BASE_CATALOG) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const quote = quotes.get(etf.yahooTicker) as Record<string, any> | null | undefined;
-    const prices = allPrices.get(etf.yahooTicker) || [];
+    const quote = quotes.get(base.yahooTicker) as Record<string, any> | null | undefined;
+    const prices = allPrices.get(base.yahooTicker) || [];
+
+    // Exclure les ETF sans aucune donnée : pas de cotation ET pas d'historique
+    // → probablement délisté ou ticker invalide
+    if (!quote && prices.length === 0) {
+      console.warn(`[ETF catalog] Skipping ${base.yahooTicker} (${base.isin}): aucune donnée disponible`);
+      continue;
+    }
+
+    // Enrichissement dynamique depuis Yahoo Finance
+    const longName: string = quote?.longName ?? quote?.shortName ?? base.yahooTicker;
+    const shortName: string = quote?.shortName ?? longName.substring(0, 50);
+    // TER depuis Yahoo Finance si disponible, sinon valeur de référence du catalogue
+    const ter: number = (quote?.annualReportExpenseRatio as number | undefined) ?? base.ter;
 
     const r1y = annualizedReturn(prices, 1);
     const r3y = annualizedReturn(prices, 3);
@@ -45,27 +56,48 @@ export async function refreshAllEtfs(): Promise<EtfRankedEntry[]> {
     const sr = sharpeRatio(perfForSharpe, vol);
     const ytd = ytdReturn(prices);
 
-    const aum: number | null = quote?.marketCap ?? null;
+    // Pour les ETF, totalAssets est plus précis que marketCap
+    const aum: number | null =
+      (quote?.totalAssets as number | undefined) ??
+      (quote?.marketCap as number | undefined) ??
+      null;
+
+    const catalogEntry: PeaEtfCatalogEntry = {
+      isin: base.isin,
+      ticker: base.yahooTicker.replace(".PA", ""),
+      yahooTicker: base.yahooTicker,
+      name: longName,
+      shortName,
+      issuer: extractIssuer(longName),
+      ter,
+      category: base.category,
+      distribution: base.distribution,
+      replication: base.replication,
+      currency: (quote?.currency as string | undefined) ?? "EUR",
+      index: base.index,
+      launchDate: "",
+      leveraged: base.leveraged,
+      leverageMultiplier: base.leverageMultiplier,
+    };
 
     const { score, breakdown } = computeScore({
-      ter: etf.ter,
+      ter,
       return5y: r5y,
       return3y: r3y,
       return1y: r1y,
       aum,
       sharpeRatio: sr,
       maxDrawdown: mdd,
-      leveraged: etf.leveraged,
+      leveraged: base.leveraged,
     });
 
     entries.push({
-      ...etf,
-      isin: etf.isin,
-      currentPrice: quote?.regularMarketPrice ?? null,
+      ...catalogEntry,
+      currentPrice: (quote?.regularMarketPrice as number | undefined) ?? null,
       aum,
-      volume: quote?.regularMarketVolume ?? null,
-      fiftyTwoWeekHigh: quote?.fiftyTwoWeekHigh ?? null,
-      fiftyTwoWeekLow: quote?.fiftyTwoWeekLow ?? null,
+      volume: (quote?.regularMarketVolume as number | undefined) ?? null,
+      fiftyTwoWeekHigh: (quote?.fiftyTwoWeekHigh as number | undefined) ?? null,
+      fiftyTwoWeekLow: (quote?.fiftyTwoWeekLow as number | undefined) ?? null,
       ytdReturn: ytd,
       return1y: r1y,
       return3y: r3y,
@@ -93,7 +125,7 @@ export function getEtfByIsin(etfs: EtfRankedEntry[], isin: string): EtfRankedEnt
 }
 
 export async function getHistoricalPricesForIsin(isin: string, years: number = 10): Promise<PricePoint[]> {
-  const etf = catalog.find((e) => e.isin === isin);
+  const etf = BASE_CATALOG.find((e) => e.isin === isin);
   if (!etf) return [];
 
   const { fetchHistoricalPrices } = await import("./yahoo-finance");

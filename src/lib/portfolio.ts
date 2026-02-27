@@ -8,10 +8,14 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
   let portfolioValue = 0;
   let totalInvested = 0;
 
-  // Add current holdings value
-  for (const h of config.holdings) {
-    portfolioValue += h.currentValue ?? 0;
-    totalInvested += h.currentValue ?? 0;
+  if (config.initialCapital !== undefined) {
+    portfolioValue = config.initialCapital;
+    totalInvested = config.initialCapital;
+  } else {
+    for (const h of config.holdings) {
+      portfolioValue += h.currentValue ?? 0;
+      totalInvested += h.currentValue ?? 0;
+    }
   }
 
   for (let year = 0; year <= totalYears; year++) {
@@ -20,8 +24,11 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
 
     if (year > 0) {
       for (let month = 0; month < 12; month++) {
-        portfolioValue = portfolioValue * (1 + monthlyRate) + config.monthlyTotal;
-        totalInvested += config.monthlyTotal;
+        // Stop contributions once PEA ceiling (150 000 €) is reached
+        const remainingCap = Math.max(0, 150_000 - totalInvested);
+        const contribution = Math.min(config.monthlyTotal, remainingCap);
+        portfolioValue = portfolioValue * (1 + monthlyRate) + contribution;
+        totalInvested += contribution;
       }
     }
 
@@ -37,6 +44,13 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
       (points.length === 0 || points[points.length - 1].projectedValue < 1_000_000)
     ) {
       point.label = "MILLIONNAIRE";
+    }
+
+    if (
+      totalInvested >= 150_000 &&
+      (points.length === 0 || points[points.length - 1].totalInvested < 150_000)
+    ) {
+      point.label = (point.label ? point.label + " + " : "") + "PLAFOND PEA";
     }
 
     if (age === config.retirementAge) {

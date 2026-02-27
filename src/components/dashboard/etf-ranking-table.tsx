@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -10,10 +11,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { EtfScoreBadge } from "./etf-score-badge";
 import { CategoryBadge } from "./category-badge";
 import { EtfFilters } from "./etf-filters";
-import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import type { EtfRankedEntry } from "@/types/etf";
 
 function fmt(val: number | null, suffix = "%", decimals = 2): string {
@@ -43,7 +45,21 @@ interface Props {
   etfs: EtfRankedEntry[];
 }
 
+const TOOLTIPS = {
+  score:
+    "Note composite (0-100) pondérant : TER 20 %, performance 30 %, encours 15 %, Sharpe 20 %, drawdown 15 %. Les ETF à levier reçoivent un malus de 15 pts.",
+  ter: "Total Expense Ratio — frais annuels de gestion déduits automatiquement (en % de la valeur). Plus c'est bas, mieux c'est.",
+  aum: "Actifs sous gestion (AUM). Un encours élevé garantit une meilleure liquidité et un spread bid/ask plus faible.",
+  perf: (p: string) =>
+    `Performance annualisée sur ${p}, calculée à partir des prix de clôture hebdomadaires (source : Yahoo Finance).`,
+  maxDD:
+    "Drawdown maximum — pire baisse enregistrée depuis un pic historique jusqu'au creux suivant. Mesure le risque de perte en capital.",
+  sharpe:
+    "Ratio de Sharpe — rendement moyen divisé par la volatilité. Mesure la performance ajustée au risque. Un ratio > 1 est considéré bon.",
+};
+
 export function EtfRankingTable({ etfs }: Props) {
+  const router = useRouter();
   const [filters, setFilters] = useState({
     search: "",
     category: "",
@@ -51,6 +67,7 @@ export function EtfRankingTable({ etfs }: Props) {
   });
   const [sortKey, setSortKey] = useState<SortKey>("rank");
   const [sortAsc, setSortAsc] = useState(true);
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
     let result = etfs;
@@ -100,6 +117,13 @@ export function EtfRankingTable({ etfs }: Props) {
     );
   }
 
+  function handleRowClick(isin: string, e: React.MouseEvent) {
+    if (e.ctrlKey || e.metaKey) return; // laisser le comportement natif du navigateur
+    e.preventDefault();
+    setNavigatingTo(isin);
+    router.push(`/etf/${isin}`);
+  }
+
   return (
     <div className="space-y-4">
       <EtfFilters filters={filters} onChange={setFilters} />
@@ -112,93 +136,137 @@ export function EtfRankingTable({ etfs }: Props) {
                 # <SortIcon col="rank" />
               </TableHead>
               <TableHead className="cursor-pointer" onClick={() => toggleSort("score")}>
-                Score <SortIcon col="score" />
+                Score{" "}
+                <HintTooltip content={TOOLTIPS.score} maxWidth={300} />
+                <SortIcon col="score" />
               </TableHead>
               <TableHead>ETF</TableHead>
               <TableHead>Cat.</TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("ter")}>
-                TER <SortIcon col="ter" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("ter")}
+              >
+                TER <HintTooltip content={TOOLTIPS.ter} />
+                <SortIcon col="ter" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("aum")}>
-                Encours <SortIcon col="aum" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("aum")}
+              >
+                Encours <HintTooltip content={TOOLTIPS.aum} />
+                <SortIcon col="aum" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("return1y")}>
-                1 an <SortIcon col="return1y" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("return1y")}
+              >
+                1 an <HintTooltip content={TOOLTIPS.perf("1 an")} />
+                <SortIcon col="return1y" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("return3y")}>
-                3 ans <SortIcon col="return3y" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("return3y")}
+              >
+                3 ans <HintTooltip content={TOOLTIPS.perf("3 ans")} />
+                <SortIcon col="return3y" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("return5y")}>
-                5 ans <SortIcon col="return5y" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("return5y")}
+              >
+                5 ans <HintTooltip content={TOOLTIPS.perf("5 ans")} />
+                <SortIcon col="return5y" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("maxDrawdown")}>
-                Max DD <SortIcon col="maxDrawdown" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("maxDrawdown")}
+              >
+                Max DD <HintTooltip content={TOOLTIPS.maxDD} />
+                <SortIcon col="maxDrawdown" />
               </TableHead>
-              <TableHead className="cursor-pointer text-right" onClick={() => toggleSort("sharpeRatio")}>
-                Sharpe <SortIcon col="sharpeRatio" />
+              <TableHead
+                className="cursor-pointer text-right"
+                onClick={() => toggleSort("sharpeRatio")}
+              >
+                Sharpe <HintTooltip content={TOOLTIPS.sharpe} />
+                <SortIcon col="sharpeRatio" />
               </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.map((etf) => (
-              <TableRow key={etf.isin} className="hover:bg-muted/50">
-                <TableCell className="font-mono text-muted-foreground">
-                  {etf.rank}
-                </TableCell>
-                <TableCell>
-                  <EtfScoreBadge score={etf.score} />
-                </TableCell>
-                <TableCell>
-                  <Link
-                    href={`/etf/${etf.isin}`}
-                    className="group block"
+            {filtered.map((etf) => {
+              const isNavigating = navigatingTo === etf.isin;
+              return (
+                <TableRow
+                  key={etf.isin}
+                  className={`cursor-pointer transition-opacity hover:bg-muted/50 ${
+                    isNavigating ? "opacity-50" : ""
+                  }`}
+                  onClick={(e) => handleRowClick(etf.isin, e)}
+                >
+                  <TableCell className="font-mono text-muted-foreground">
+                    {etf.rank}
+                  </TableCell>
+                  <TableCell>
+                    {isNavigating ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    ) : (
+                      <EtfScoreBadge score={etf.score} />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Link
+                      href={`/etf/${etf.isin}`}
+                      className="group block"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="font-medium group-hover:text-primary group-hover:underline">
+                        {etf.shortName}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {etf.ticker} &middot; {etf.isin}
+                      </div>
+                    </Link>
+                  </TableCell>
+                  <TableCell>
+                    <CategoryBadge category={etf.category} />
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {(etf.ter * 100).toFixed(2)}%
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {fmtAum(etf.aum)}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-mono text-sm ${
+                      (etf.return1y ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                    }`}
                   >
-                    <div className="font-medium group-hover:text-primary group-hover:underline">
-                      {etf.shortName}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {etf.ticker} &middot; {etf.isin}
-                    </div>
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <CategoryBadge category={etf.category} />
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm">
-                  {(etf.ter * 100).toFixed(2)}%
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm">
-                  {fmtAum(etf.aum)}
-                </TableCell>
-                <TableCell
-                  className={`text-right font-mono text-sm ${
-                    (etf.return1y ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {fmt(etf.return1y)}
-                </TableCell>
-                <TableCell
-                  className={`text-right font-mono text-sm ${
-                    (etf.return3y ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {fmt(etf.return3y)}
-                </TableCell>
-                <TableCell
-                  className={`text-right font-mono text-sm ${
-                    (etf.return5y ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
-                  }`}
-                >
-                  {fmt(etf.return5y)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm text-red-600">
-                  {fmt(etf.maxDrawdown)}
-                </TableCell>
-                <TableCell className="text-right font-mono text-sm">
-                  {etf.sharpeRatio !== null ? etf.sharpeRatio.toFixed(2) : "—"}
-                </TableCell>
-              </TableRow>
-            ))}
+                    {fmt(etf.return1y)}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-mono text-sm ${
+                      (etf.return3y ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {fmt(etf.return3y)}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-mono text-sm ${
+                      (etf.return5y ?? 0) >= 0 ? "text-emerald-600" : "text-red-600"
+                    }`}
+                  >
+                    {fmt(etf.return5y)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm text-red-600">
+                    {fmt(etf.maxDrawdown)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-sm">
+                    {etf.sharpeRatio !== null ? etf.sharpeRatio.toFixed(2) : "—"}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={11} className="py-8 text-center text-muted-foreground">

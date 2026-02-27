@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PEA Dashboard - Classement ETF",
+  title: "PEA - Classement ETF",
   description:
-    "Dashboard de classement et comparaison des ETF eligibles PEA en France",
+    "Classement et comparaison des ETF eligibles PEA en France",
 };
 
 export default function RootLayout({

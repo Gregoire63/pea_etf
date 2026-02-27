@@ -19,7 +19,7 @@ export function Navbar() {
       <div className="mx-auto flex h-14 max-w-7xl items-center px-4">
         <Link href="/" className="mr-8 flex items-center gap-2 font-bold">
           <TrendingUp className="h-5 w-5 text-emerald-600" />
-          <span>PEA Dashboard</span>
+          <span>PEA - ETF</span>
         </Link>
         <nav className="flex items-center gap-1">
           {links.map(({ href, label, icon: Icon }) => (

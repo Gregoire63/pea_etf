@@ -14,6 +14,7 @@ export interface PortfolioConfig {
   birthYear: number;
   retirementAge: number;
   expectedAnnualReturn: number;
+  initialCapital?: number;
 }
 
 export interface ProjectionPoint {

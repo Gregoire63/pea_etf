@@ -1,15 +1,20 @@
+import { getAllEtfsRanked } from "@/lib/etf-data";
 import { PortfolioClient } from "./portfolio-client";
 
-export default function PortfolioPage() {
+export const dynamic = "force-dynamic";
+
+export default async function PortfolioPage() {
+  const etfs = await getAllEtfsRanked();
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Mon Portfolio</h1>
         <p className="text-muted-foreground">
-          Allocation actuelle et projection jusqu&apos;a la retraite.
+          Stratégie personnalisée et projection jusqu&apos;à la retraite.
         </p>
       </div>
-      <PortfolioClient />
+      <PortfolioClient etfs={etfs} />
     </div>
   );
 }
