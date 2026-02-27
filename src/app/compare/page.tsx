@@ -1,10 +1,10 @@
 import { getAllEtfsRanked } from "@/lib/etf-data";
-import { EtfRankingTable } from "@/components/dashboard/etf-ranking-table";
+import { CompareClient } from "./compare-client";
 import type { EtfRankedEntry } from "@/types/etf";
 
 export const dynamic = "force-dynamic";
 
-export default async function DashboardPage() {
+export default async function ComparePage() {
   let etfs: EtfRankedEntry[] = [];
   try {
     etfs = await getAllEtfsRanked();
@@ -16,14 +16,13 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">
-          Classement ETF PEA
+          Comparer des ETF
         </h1>
         <p className="text-muted-foreground">
-          Tous les ETF eligibles PEA classes par score (TER, performance,
-          encours, Sharpe, drawdown).
+          Selectionnez 2 a 3 ETF pour les comparer cote a cote.
         </p>
       </div>
-      <EtfRankingTable etfs={etfs} />
+      <CompareClient allEtfs={etfs} />
     </div>
   );
 }
