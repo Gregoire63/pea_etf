@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { HelpCircle } from "lucide-react";
 import {
   Tooltip,
@@ -16,21 +16,32 @@ interface HintTooltipProps {
 
 /**
  * Icône "?" avec tooltip au survol (desktop) et au tap (mobile).
- * Doit être utilisé à l'intérieur d'un <TooltipProvider> (déjà dans le layout).
+ * Sur mobile : un tap ouvre, un second tap (ou tap ailleurs) ferme.
+ * Doit être utilisé à l'intérieur d'un <TooltipProvider>.
  */
 export function HintTooltip({ content, maxWidth = 260 }: HintTooltipProps) {
   const [open, setOpen] = useState(false);
+  // Timestamp du dernier touch-open pour bloquer le onOpenChange(false) de Radix
+  const lastTouchMs = useRef(0);
 
   return (
-    <Tooltip open={open} onOpenChange={setOpen}>
+    <Tooltip
+      open={open}
+      onOpenChange={(v) => {
+        // Sur touch : Radix émet onOpenChange(false) juste après le pointerUp.
+        // On ignore cet événement s'il survient dans les 300 ms suivant un tap.
+        if (!v && Date.now() - lastTouchMs.current < 300) return;
+        setOpen(v);
+      }}
+    >
       <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
         <span
           className="ml-1 inline-flex cursor-help items-center align-middle"
           onPointerDown={(e) => {
-            // Sur mobile (touch), on bascule l'ouverture manuellement
-            // Sur desktop (mouse), on laisse Radix gérer le hover via onOpenChange
             if (e.pointerType === "touch") {
               e.stopPropagation();
+              const wasOpen = open;
+              lastTouchMs.current = wasOpen ? 0 : Date.now(); // n'immune pas la fermeture tap
               setOpen((v) => !v);
             }
           }}

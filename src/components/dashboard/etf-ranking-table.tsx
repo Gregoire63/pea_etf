@@ -15,6 +15,8 @@ import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { EtfScoreBadge } from "./etf-score-badge";
 import { CategoryBadge } from "./category-badge";
 import { EtfFilters } from "./etf-filters";
+import { ScoreWeightsConfigurator } from "./score-weights-configurator";
+import { useScoreWeights } from "@/hooks/use-score-weights";
 import { ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import type { EtfRankedEntry } from "@/types/etf";
 
@@ -46,8 +48,6 @@ interface Props {
 }
 
 const TOOLTIPS = {
-  score:
-    "Note composite (0-100) pondérant : TER 20 %, performance 30 %, encours 15 %, Sharpe 20 %, drawdown 15 %. Les ETF à levier reçoivent un malus de 15 pts.",
   ter: "Total Expense Ratio — frais annuels de gestion déduits automatiquement (en % de la valeur). Plus c'est bas, mieux c'est.",
   aum: "Actifs sous gestion (AUM). Un encours élevé garantit une meilleure liquidité et un spread bid/ask plus faible.",
   perf: (p: string) =>
@@ -69,8 +69,44 @@ export function EtfRankingTable({ etfs }: Props) {
   const [sortAsc, setSortAsc] = useState(true);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
+  const { weights, normalizedWeights, isCustom, updateWeights, resetWeights } =
+    useScoreWeights();
+
+  // Recompute composite scores and ranks using custom weights
+  const etfsWithCustomScores = useMemo(() => {
+    const scored = etfs.map((etf) => {
+      const { terScore, performanceScore, aumScore, sharpeScore, drawdownScore } =
+        etf.scoreBreakdown;
+      const leveragePenalty = etf.leveraged ? 0.85 : 1.0;
+      const customScore =
+        Math.round(
+          (normalizedWeights.ter * terScore +
+            normalizedWeights.performance * performanceScore +
+            normalizedWeights.aum * aumScore +
+            normalizedWeights.sharpe * sharpeScore +
+            normalizedWeights.drawdown * drawdownScore) *
+            leveragePenalty *
+            10
+        ) / 10;
+      return { ...etf, score: customScore };
+    });
+
+    // Re-rank by custom score descending
+    const sortedByScore = [...scored].sort((a, b) => b.score - a.score);
+    return sortedByScore.map((etf, i) => ({ ...etf, rank: i + 1 }));
+  }, [etfs, normalizedWeights]);
+
+  // Dynamic score tooltip reflecting current weights
+  const scoreTooltip = useMemo(() => {
+    const total =
+      weights.ter + weights.performance + weights.aum + weights.sharpe + weights.drawdown;
+    if (total === 0) return "Note composite (0–100).";
+    const pct = (v: number) => Math.round((v / total) * 100);
+    return `Note composite (0–100) pondérant : TER ${pct(weights.ter)} %, performance ${pct(weights.performance)} %, encours ${pct(weights.aum)} %, Sharpe ${pct(weights.sharpe)} %, drawdown ${pct(weights.drawdown)} %. Les ETF à levier reçoivent un malus de 15 %.`;
+  }, [weights]);
+
   const filtered = useMemo(() => {
-    let result = etfs;
+    let result = etfsWithCustomScores;
     if (filters.search) {
       const q = filters.search.toLowerCase();
       result = result.filter(
@@ -97,7 +133,7 @@ export function EtfRankingTable({ etfs }: Props) {
     });
 
     return sorted;
-  }, [etfs, filters, sortKey, sortAsc]);
+  }, [etfsWithCustomScores, filters, sortKey, sortAsc]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -118,7 +154,7 @@ export function EtfRankingTable({ etfs }: Props) {
   }
 
   function handleRowClick(isin: string, e: React.MouseEvent) {
-    if (e.ctrlKey || e.metaKey) return; // laisser le comportement natif du navigateur
+    if (e.ctrlKey || e.metaKey) return;
     e.preventDefault();
     setNavigatingTo(isin);
     router.push(`/etf/${isin}`);
@@ -126,7 +162,18 @@ export function EtfRankingTable({ etfs }: Props) {
 
   return (
     <div className="space-y-4">
-      <EtfFilters filters={filters} onChange={setFilters} />
+      {/* Filters + score configurator */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <EtfFilters filters={filters} onChange={setFilters} />
+        <div className="shrink-0">
+          <ScoreWeightsConfigurator
+            weights={weights}
+            onChange={updateWeights}
+            onReset={resetWeights}
+            isCustom={isCustom}
+          />
+        </div>
+      </div>
 
       <div className="overflow-x-auto rounded-lg border">
         <Table>
@@ -137,7 +184,7 @@ export function EtfRankingTable({ etfs }: Props) {
               </TableHead>
               <TableHead className="cursor-pointer" onClick={() => toggleSort("score")}>
                 Score{" "}
-                <HintTooltip content={TOOLTIPS.score} maxWidth={300} />
+                <HintTooltip content={scoreTooltip} maxWidth={320} />
                 <SortIcon col="score" />
               </TableHead>
               <TableHead>ETF</TableHead>
