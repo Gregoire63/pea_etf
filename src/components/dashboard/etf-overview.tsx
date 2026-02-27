@@ -10,7 +10,8 @@ function fmtPct(v: number | null): string {
   return `${sign}${(v * 100).toFixed(2)}%`;
 }
 
-function fmtAum(v: number): string {
+function fmtAum(v: number | null): string {
+  if (v === null || v === 0) return "—";
   if (v >= 1e12) return `${(v / 1e12).toFixed(1)} Md€`;
   if (v >= 1e9) return `${(v / 1e9).toFixed(1)} Md€`;
   if (v >= 1e6) return `${(v / 1e6).toFixed(0)} M€`;
@@ -69,34 +70,34 @@ export function EtfOverview({ etfs }: { etfs: EtfRankedEntry[] }) {
   return (
     <div className="space-y-4">
       {/* KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">ETF suivis</div>
-            <div className="mt-1 text-2xl font-bold">{etfs.length}</div>
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">ETF suivis</div>
+            <div className="mt-0.5 text-xl font-bold sm:mt-1 sm:text-2xl">{etfs.length}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">AUM total catalogué</div>
-            <div className="mt-1 text-2xl font-bold">{fmtAum(totalAum)}</div>
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">AUM total catalogué</div>
+            <div className="mt-0.5 text-xl font-bold sm:mt-1 sm:text-2xl">{fmtAum(totalAum > 0 ? totalAum : null)}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">TER moyen</div>
-            <div className="mt-1 text-2xl font-bold">{avgTer.toFixed(2)}%</div>
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">TER moyen</div>
+            <div className="mt-0.5 text-xl font-bold sm:mt-1 sm:text-2xl">{avgTer.toFixed(2)}%</div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Hausse sur 1 an</div>
-            <div className="mt-1 text-2xl font-bold">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Hausse sur 1 an</div>
+            <div className="mt-0.5 text-xl font-bold sm:mt-1 sm:text-2xl">
               {valid.length > 0 ? (
                 <>
                   <span className="text-emerald-600">{positiveCount}</span>
-                  <span className="text-base font-normal text-muted-foreground">
-                    /{valid.length} ETF
+                  <span className="text-sm font-normal text-muted-foreground sm:text-base">
+                    /{etfs.length} ETF
                   </span>
                 </>
               ) : (
@@ -143,7 +144,7 @@ export function EtfOverview({ etfs }: { etfs: EtfRankedEntry[] }) {
                       {fmtPct(c.avg1y)}
                     </td>
                     <td className="px-4 py-2 text-right text-xs text-muted-foreground">
-                      {c.totalAum > 0 ? fmtAum(c.totalAum) : "—"}
+                      {fmtAum(c.totalAum)}
                     </td>
                   </tr>
                 ))}

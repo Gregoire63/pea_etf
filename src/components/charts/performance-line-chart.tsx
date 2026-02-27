@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   LineChart,
   Line,
@@ -25,10 +26,12 @@ export function PerformanceLineChart({
   labels = {},
   normalize = true,
 }: Props) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   const tickers = Object.keys(data);
   if (tickers.length === 0) return null;
 
-  // Merge all dates and normalize to base 100
   const allDates = new Set<string>();
   for (const prices of Object.values(data)) {
     for (const p of prices) allDates.add(p.date);
@@ -57,27 +60,38 @@ export function PerformanceLineChart({
     return point;
   });
 
-  // Only show every nth label for readability
-  const tickInterval = Math.max(1, Math.floor(chartData.length / 8));
+  // Fewer X labels to avoid crowding, especially on mobile
+  const tickInterval = Math.max(1, Math.floor(chartData.length / 6));
+
+  if (!mounted) {
+    return <div className="h-[260px] animate-pulse rounded-lg bg-muted" />;
+  }
 
   return (
-    <ResponsiveContainer width="100%" height={400}>
-      <LineChart data={chartData}>
+    // height is a fixed number → avoids the -1 ResponsiveContainer warning
+    <ResponsiveContainer width="100%" height={260}>
+      <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 30 }}>
         <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11 }}
+          tick={{ fontSize: 10, textAnchor: "end" }}
+          angle={-35}
           interval={tickInterval}
           tickFormatter={(d: string) => d.slice(0, 7)}
+          height={48}
         />
         <YAxis
-          tick={{ fontSize: 11 }}
-          tickFormatter={(v: number) => (normalize ? `${v}` : `${v}€`)}
+          tick={{ fontSize: 10 }}
+          tickFormatter={(v: number) => normalize ? `${Math.round(v)}` : `${Math.round(v)}€`}
+          width={normalize ? 32 : 44}
+          tickCount={5}
         />
         <Tooltip
           labelFormatter={(d) => String(d)}
           formatter={(value, name) => [
-            normalize ? `${Number(value).toFixed(1)}` : `${Number(value).toFixed(2)}€`,
+            normalize
+              ? `${Number(value).toFixed(1)}`
+              : `${Number(value).toFixed(2)} €`,
             labels[String(name)] || String(name),
           ]}
         />

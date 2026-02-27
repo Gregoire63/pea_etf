@@ -17,7 +17,7 @@ export async function PriceChartSection({
       <CardHeader>
         <CardTitle>Historique de prix</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0">
         <EtfDetailChart prices={prices} ticker={ticker} />
       </CardContent>
     </Card>

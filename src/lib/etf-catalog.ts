@@ -68,7 +68,7 @@ export const BASE_CATALOG: BaseCatalogEntry[] = [
   { isin: "FR0011869320", yahooTicker: "PINR.PA",  category: "Asia",     index: "MSCI India",                          ter: 0.0085, distribution: "ACC",  replication: "Synthetic", leveraged: false },
 
   // ── Japon ──────────────────────────────────────────────────────────────────
-  { isin: "FR0011869312", yahooTicker: "PKRW.PA",  category: "Japan",    index: "MSCI Japan",                          ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "FR0011869312", yahooTicker: "PKRW.PA",  category: "Asia",     index: "MSCI Korea",                         ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0011411980", yahooTicker: "TPXE.PA",  category: "Japan",    index: "TOPIX",                               ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
 
   // ── Sectoriels ─────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ export const BASE_CATALOG: BaseCatalogEntry[] = [
   { isin: "LU1834988351", yahooTicker: "CD8.PA",   category: "Sector",   index: "STOXX Europe 600 Banks",              ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "LU1834988088", yahooTicker: "CU2.PA",   category: "Sector",   index: "STOXX Europe 600 Utilities",          ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "LU1834988161", yahooTicker: "C6E.PA",   category: "Sector",   index: "STOXX Europe 600 Energy",             ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834988245", yahooTicker: "C8R.PA",   category: "Sector",   index: "STOXX Europe 600 Real Estate",        ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "LU1834988245", yahooTicker: "EPRE.PA",  category: "Sector",   index: "STOXX Europe 600 Real Estate",        ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0011869379", yahooTicker: "PNRJ.PA",  category: "Sector",   index: "World Alternative Energy",            ter: 0.0060, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "LU2572257124", yahooTicker: "GOAI.PA",  category: "Sector",   index: "MSCI ACWI IMI Robotics & AI ESG",     ter: 0.0040, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "LU2089238302", yahooTicker: "WATC.PA",  category: "Sector",   index: "MSCI ACWI IMI Water ESG",             ter: 0.0035, distribution: "ACC",  replication: "Synthetic", leveraged: false },

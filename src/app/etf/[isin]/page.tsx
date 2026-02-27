@@ -167,32 +167,37 @@ export default async function EtfDetailPage({
         <ArrowLeft className="h-4 w-4" /> Retour au classement
       </Link>
 
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{etf.shortName}</h1>
-            <EtfScoreBadge score={etf.score} />
-            <CategoryBadge category={etf.category} />
-            {etf.leveraged && (
-              <Badge variant="destructive">Levier x{etf.leverageMultiplier}</Badge>
-            )}
+      <div className="space-y-1.5">
+        {/* Ligne 1 : titre + rang */}
+        <div className="flex items-start justify-between gap-2">
+          <h1 className="text-xl font-bold leading-tight sm:text-2xl">{etf.shortName}</h1>
+          <div className="shrink-0 text-right">
+            <div className="text-[10px] text-muted-foreground">Rang</div>
+            <div className="text-2xl font-bold leading-none sm:text-3xl">#{etf.rank}</div>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {etf.name} &middot; {etf.ticker} &middot; {etf.isin} &middot; {etf.issuer}
-          </p>
         </div>
-        <div className="text-right">
-          <div className="text-sm text-muted-foreground">Rang</div>
-          <div className="text-3xl font-bold">#{etf.rank}</div>
+        {/* Ligne 2 : badges */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <EtfScoreBadge score={etf.score} />
+          <CategoryBadge category={etf.category} />
+          {etf.leveraged && (
+            <Badge variant="destructive">Levier x{etf.leverageMultiplier}</Badge>
+          )}
         </div>
+        {/* Ligne 3 : métadonnées compactes */}
+        <p className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">{etf.ticker}</span>
+          {" · "}{etf.isin}
+          {" · "}{etf.issuer}
+        </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         {metrics.map((m, i) => (
           <Card key={i}>
-            <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground">{m.label}</div>
-              <div className="mt-1 text-lg font-semibold">{m.value}</div>
+            <CardContent className="p-3 sm:p-4">
+              <div className="text-[11px] text-muted-foreground sm:text-xs">{m.label}</div>
+              <div className="mt-0.5 text-base font-semibold sm:mt-1 sm:text-lg">{m.value}</div>
             </CardContent>
           </Card>
         ))}
@@ -202,7 +207,7 @@ export default async function EtfDetailPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>Detail du score : {etf.score.toFixed(1)} / 100</CardTitle>
+          <CardTitle>Détail du score : {etf.score.toFixed(1)} / 100</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">

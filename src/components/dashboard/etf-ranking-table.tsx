@@ -128,7 +128,7 @@ export function EtfRankingTable({ etfs }: Props) {
     <div className="space-y-4">
       <EtfFilters filters={filters} onChange={setFilters} />
 
-      <div className="rounded-lg border">
+      <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -13,6 +14,7 @@ import {
 import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
 import { CategoryBadge } from "@/components/dashboard/category-badge";
 import { PerformanceLineChart } from "@/components/charts/performance-line-chart";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 import type { EtfRankedEntry, PricePoint } from "@/types/etf";
 
 function fmt(val: number | null): string {
@@ -73,20 +75,29 @@ export function CompareClient({ allEtfs }: Props) {
     });
   }
 
-  const rows: { label: string; values: (string | number | null)[]; highlight?: "max" | "min" }[] =
+  function hint(text: string, tooltip: string): React.ReactNode {
+    return (
+      <span className="inline-flex items-center">
+        {text}
+        <HintTooltip content={tooltip} />
+      </span>
+    );
+  }
+
+  const rows: { key: string; label: React.ReactNode; values: (string | number | null)[]; highlight?: "max" | "min" }[] =
     selectedEtfs.length > 0
       ? [
-          { label: "Score", values: selectedEtfs.map((e) => e.score), highlight: "max" },
-          { label: "Rang", values: selectedEtfs.map((e) => `#${e.rank}`) },
-          { label: "TER", values: selectedEtfs.map((e) => `${(e.ter * 100).toFixed(2)}%`), highlight: "min" },
-          { label: "Encours", values: selectedEtfs.map((e) => fmtAum(e.aum)) },
-          { label: "Distribution", values: selectedEtfs.map((e) => e.distribution) },
-          { label: "Replication", values: selectedEtfs.map((e) => e.replication) },
-          { label: "1 an", values: selectedEtfs.map((e) => fmt(e.return1y)), highlight: "max" },
-          { label: "3 ans", values: selectedEtfs.map((e) => fmt(e.return3y)), highlight: "max" },
-          { label: "5 ans", values: selectedEtfs.map((e) => fmt(e.return5y)), highlight: "max" },
-          { label: "Max Drawdown", values: selectedEtfs.map((e) => fmt(e.maxDrawdown)), highlight: "max" },
-          { label: "Sharpe", values: selectedEtfs.map((e) => e.sharpeRatio?.toFixed(2) ?? "—"), highlight: "max" },
+          { key: "score",      label: hint("Score",        "Score composite sur 100 calculé à partir du TER (20%), des performances (30%), de l'encours (15%), du ratio de Sharpe (20%) et du drawdown maximum (15%)."), values: selectedEtfs.map((e) => e.score),                         highlight: "max" },
+          { key: "rang",       label: "Rang",                                                                                                                                                                             values: selectedEtfs.map((e) => `#${e.rank}`)                                    },
+          { key: "ter",        label: hint("TER",          "Total Expense Ratio — frais annuels de gestion déduits automatiquement de la valeur de l'ETF. Plus c'est bas, mieux c'est."),                                values: selectedEtfs.map((e) => `${(e.ter * 100).toFixed(2)}%`),          highlight: "min" },
+          { key: "encours",    label: hint("Encours",      "Actifs sous gestion (AUM). Un encours élevé garantit une meilleure liquidité et des spreads bid/ask plus faibles."),                                          values: selectedEtfs.map((e) => fmtAum(e.aum))                                    },
+          { key: "distrib",    label: hint("Distribution", "ACC (Capitalisant) : les dividendes sont réinvestis automatiquement. DIST (Distribuant) : les dividendes vous sont versés."),                                 values: selectedEtfs.map((e) => e.distribution)                                   },
+          { key: "replic",     label: hint("Réplication",  "Physique : l'ETF achète directement les actions de l'indice. Synthétique (Swap) : réplication via des contrats dérivés — nécessaire pour l'éligibilité PEA des indices non-européens."), values: selectedEtfs.map((e) => e.replication) },
+          { key: "r1y",        label: hint("1 an",         "Performance annualisée sur les 12 derniers mois, calculée à partir des prix de clôture hebdomadaires."),                                                      values: selectedEtfs.map((e) => fmt(e.return1y)),                          highlight: "max" },
+          { key: "r3y",        label: hint("3 ans (ann.)", "Performance annualisée sur 3 ans — correspond au taux de croissance annuel composé (TCAC) sur la période."),                                                   values: selectedEtfs.map((e) => fmt(e.return3y)),                          highlight: "max" },
+          { key: "r5y",        label: hint("5 ans (ann.)", "Performance annualisée sur 5 ans — correspond au taux de croissance annuel composé (TCAC) sur la période."),                                                   values: selectedEtfs.map((e) => fmt(e.return5y)),                          highlight: "max" },
+          { key: "drawdown",   label: hint("Max Drawdown", "Pire baisse enregistrée depuis un pic historique jusqu'au creux suivant. Mesure le risque maximal de perte en capital."),                                     values: selectedEtfs.map((e) => fmt(e.maxDrawdown)),                       highlight: "max" },
+          { key: "sharpe",     label: hint("Sharpe",       "Ratio de Sharpe = rendement / volatilité. Mesure la performance ajustée au risque. Un ratio > 1 est considéré bon ; > 2 est excellent."),                    values: selectedEtfs.map((e) => e.sharpeRatio?.toFixed(2) ?? "—"),        highlight: "max" },
         ]
       : [];
 
@@ -100,7 +111,7 @@ export function CompareClient({ allEtfs }: Props) {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Selectionner les ETF ({selected.length}/3)</CardTitle>
+          <CardTitle>Sélectionner les ETF ({selected.length}/3)</CardTitle>
         </CardHeader>
         <CardContent>
           <input
@@ -155,7 +166,7 @@ export function CompareClient({ allEtfs }: Props) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Metrique</TableHead>
+                    <TableHead>Métrique</TableHead>
                     {selectedEtfs.map((e) => (
                       <TableHead key={e.isin} className="text-center">
                         {e.ticker}
@@ -165,7 +176,7 @@ export function CompareClient({ allEtfs }: Props) {
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => (
-                    <TableRow key={row.label}>
+                    <TableRow key={row.key}>
                       <TableCell className="font-medium">{row.label}</TableCell>
                       {row.values.map((val, i) => (
                         <TableCell key={i} className="text-center font-mono">
@@ -182,7 +193,7 @@ export function CompareClient({ allEtfs }: Props) {
           {Object.keys(historicalData).length >= 2 && (
             <Card>
               <CardHeader>
-                <CardTitle>Performance comparee (base 100)</CardTitle>
+                <CardTitle>Performance comparée (base 100)</CardTitle>
               </CardHeader>
               <CardContent>
                 <PerformanceLineChart

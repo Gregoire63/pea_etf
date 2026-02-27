@@ -50,10 +50,19 @@ export async function refreshAllEtfs(): Promise<EtfRankedEntry[]> {
     }
 
     // Enrichissement dynamique depuis Yahoo Finance
-    const longName: string = quote?.longName ?? quote?.shortName ?? base.yahooTicker;
-    const shortName: string = quote?.shortName ?? longName.substring(0, 50);
+    // Ignorer les noms "** SEE <TICKER>" — Yahoo Finance renvoie ce pattern pour les
+    // tickers renommés/fusionnés ; on utilise alors le ticker comme fallback.
+    const rawLongName: string = quote?.longName ?? quote?.shortName ?? "";
+    const rawShortName: string = quote?.shortName ?? "";
+    const isRedirectName = (s: string) => /^\*\*\s*SEE\b/i.test(s);
+    const longName: string = isRedirectName(rawLongName) || !rawLongName
+      ? (isRedirectName(rawShortName) || !rawShortName ? base.yahooTicker : rawShortName)
+      : rawLongName;
+    const shortName: string = isRedirectName(rawShortName) || !rawShortName
+      ? longName.substring(0, 50)
+      : rawShortName;
     // TER depuis Yahoo Finance si disponible, sinon valeur de référence du catalogue
-    const ter: number = (quote?.annualReportExpenseRatio as number | undefined) ?? base.ter;
+    const ter: number = (quote?.netExpenseRatio as number | undefined) ?? base.ter;
 
     const r1y = annualizedReturn(prices, 1);
     const r3y = annualizedReturn(prices, 3);
@@ -65,10 +74,13 @@ export async function refreshAllEtfs(): Promise<EtfRankedEntry[]> {
     const sr = sharpeRatio(perfForSharpe, vol);
     const ytd = ytdReturn(prices);
 
-    // Pour les ETF, totalAssets est plus précis que marketCap
+    // Pour les ETF, netAssets est le champ AUM du type QuoteEtf (yahoo-finance2).
+    // On traite 0 comme absent (Yahoo Finance renvoie parfois 0 pour les ETF .PA).
+    const rawNetAssets = quote?.netAssets as number | undefined;
+    const rawMarketCap = quote?.marketCap as number | undefined;
     const aum: number | null =
-      (quote?.totalAssets as number | undefined) ??
-      (quote?.marketCap as number | undefined) ??
+      (rawNetAssets && rawNetAssets > 0 ? rawNetAssets : undefined) ??
+      (rawMarketCap && rawMarketCap > 0 ? rawMarketCap : undefined) ??
       null;
 
     const catalogEntry: PeaEtfCatalogEntry = {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState, Suspense } from "react";
 import type React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -280,7 +280,7 @@ function EtfStrategySection({
         <CardTitle>Stratégie ETF recommandée</CardTitle>
 
         {/* ── Sélecteur de profil ────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-3 pt-1">
+        <div className="grid grid-cols-3 gap-2 pt-1 sm:gap-3">
           {(["agressif", "équilibré", "défensif"] as RiskProfile[]).map((p) => {
             const c = RISK_CONFIG[p];
             const isSelected = selectedProfile === p;
@@ -289,21 +289,21 @@ function EtfStrategySection({
               <button
                 key={p}
                 onClick={() => onProfileChange(p)}
-                className={`relative flex flex-col items-center gap-1 rounded-xl border-2 px-3 py-3 text-center transition-all ${
+                className={`relative flex flex-col items-center gap-0.5 rounded-xl border-2 px-1.5 py-2 text-center transition-all sm:gap-1 sm:px-3 sm:py-3 ${
                   isSelected
                     ? `${c.bgColor} ${c.borderColor} ${c.color}`
                     : "border-muted bg-muted/20 text-muted-foreground hover:border-muted-foreground/30 hover:bg-muted/40"
                 }`}
               >
                 {isComputed && (
-                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground whitespace-nowrap">
+                  <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-semibold text-primary-foreground whitespace-nowrap sm:px-2 sm:text-[10px]">
                     Recommandé
                   </span>
                 )}
-                <c.Icon className="h-5 w-5" />
-                <span className="text-sm font-semibold">{c.label}</span>
-                <span className="text-xs opacity-80">{c.returnMin}–{c.returnMax}%/an</span>
-                <span className="text-[10px] opacity-60">{c.desc}</span>
+                <c.Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                <span className="text-[11px] font-semibold sm:text-sm">{c.label}</span>
+                <span className="text-[9px] opacity-80 sm:text-xs">{c.returnMin}–{c.returnMax}%/an</span>
+                <span className="hidden text-[10px] opacity-60 sm:block">{c.desc}</span>
               </button>
             );
           })}
@@ -351,78 +351,50 @@ function EtfStrategySection({
           {strategy.etfs.map((etf, i) => {
             const live = rankedEtfs.find((r) => r.isin === etf.isin);
             return (
-              <div key={etf.isin} className="flex gap-4 p-4 hover:bg-muted/20 transition-colors">
-                {/* Poids */}
-                <div className="flex w-12 shrink-0 flex-col items-center justify-start pt-1">
-                  <div className={`text-xl font-bold ${TEXT_COLORS[i % TEXT_COLORS.length]}`}>
+              <div key={etf.isin} className="p-3 hover:bg-muted/20 transition-colors sm:p-4">
+                {/* Ligne du haut : pourcentage + badges + nom */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className={`text-base font-bold shrink-0 sm:text-xl ${TEXT_COLORS[i % TEXT_COLORS.length]}`}>
                     {etf.weight}%
-                  </div>
-                  <div className={`mt-1 h-1 w-8 rounded-full ${BAR_COLORS[i % BAR_COLORS.length]}`} />
+                  </span>
+                  <div className={`h-1 w-5 rounded-full shrink-0 ${BAR_COLORS[i % BAR_COLORS.length]}`} />
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium sm:text-xs ${ROLE_COLORS[etf.role]}`}>
+                    {etf.role}
+                  </span>
+                  <Link
+                    href={`/etf/${etf.isin}`}
+                    className="min-w-0 truncate text-xs font-semibold hover:text-primary hover:underline sm:text-sm"
+                  >
+                    {etf.shortName}
+                  </Link>
+                  <span className="hidden text-xs text-muted-foreground font-mono sm:inline">{etf.ticker}</span>
                 </div>
 
-                {/* Infos */}
-                <div className="flex-1 min-w-0 space-y-1.5">
-                  {/* Nom + badges */}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[etf.role]}`}>
-                      {etf.role}
+                {/* Indice */}
+                <div className="text-[11px] text-muted-foreground mb-1 sm:text-xs">{etf.index}</div>
+
+                {/* Données live */}
+                {live && (
+                  <div className="flex flex-wrap items-center gap-2 mb-1 sm:gap-3">
+                    <EtfScoreBadge score={live.score} />
+                    <span className="text-[11px] text-muted-foreground sm:text-xs">
+                      TER <span className="font-medium text-foreground">{(live.ter * 100).toFixed(2)}%</span>
                     </span>
-                    <Link
-                      href={`/etf/${etf.isin}`}
-                      className="text-sm font-semibold hover:text-primary hover:underline"
-                    >
-                      {etf.shortName}
-                    </Link>
-                    <span className="text-xs text-muted-foreground font-mono">{etf.ticker}</span>
-                  </div>
-
-                  {/* Indice */}
-                  <div className="text-xs text-muted-foreground">{etf.index}</div>
-
-                  {/* Données live du classement */}
-                  {live && (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <EtfScoreBadge score={live.score} />
-                      <span className="text-xs text-muted-foreground">
-                        TER{" "}
-                        <span className="font-medium text-foreground">
-                          {(live.ter * 100).toFixed(2)}%
-                        </span>
+                    {live.return1y !== null && (
+                      <span className={`text-[11px] font-medium sm:text-xs ${live.return1y >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        1an {live.return1y >= 0 ? "+" : ""}{(live.return1y * 100).toFixed(1)}%
                       </span>
-                      {live.return1y !== null && (
-                        <span
-                          className={`text-xs font-medium ${
-                            live.return1y >= 0 ? "text-emerald-600" : "text-red-600"
-                          }`}
-                        >
-                          1 an : {live.return1y >= 0 ? "+" : ""}
-                          {(live.return1y * 100).toFixed(1)}%
-                        </span>
-                      )}
-                      {live.return3y !== null && (
-                        <span
-                          className={`text-xs font-medium ${
-                            live.return3y >= 0 ? "text-emerald-600" : "text-red-600"
-                          }`}
-                        >
-                          3 ans : {live.return3y >= 0 ? "+" : ""}
-                          {(live.return3y * 100).toFixed(1)}%
-                        </span>
-                      )}
-                      {live.aum !== null && (
-                        <span className="text-xs text-muted-foreground">
-                          Encours{" "}
-                          <span className="font-medium text-foreground">
-                            {fmtAumShort(live.aum)}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                  )}
+                    )}
+                    {live.return3y !== null && (
+                      <span className={`hidden text-xs font-medium sm:inline ${live.return3y >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        3ans {live.return3y >= 0 ? "+" : ""}{(live.return3y * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                )}
 
-                  {/* Raison */}
-                  <p className="text-sm text-muted-foreground leading-relaxed">{etf.reason}</p>
-                </div>
+                {/* Raison */}
+                <p className="text-[11px] text-muted-foreground leading-relaxed sm:text-sm">{etf.reason}</p>
               </div>
             );
           })}
@@ -438,21 +410,45 @@ function EtfStrategySection({
   );
 }
 
+// Charge les données ETF via use() — suspend jusqu'à résolution
+function EtfStrategyLoader({
+  etfsPromise,
+  strategy,
+  selectedProfile,
+  onProfileChange,
+}: {
+  etfsPromise: Promise<EtfRankedEntry[]>;
+  strategy: PortfolioStrategy;
+  selectedProfile: RiskProfile;
+  onProfileChange: (p: RiskProfile) => void;
+}) {
+  const etfs = use(etfsPromise);
+  return (
+    <EtfStrategySection
+      strategy={strategy}
+      rankedEtfs={etfs}
+      selectedProfile={selectedProfile}
+      onProfileChange={onProfileChange}
+    />
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Projection dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProjectionDashboard({
   profile,
-  rankedEtfs,
+  etfsPromise,
 }: {
   profile: UserProfile;
-  rankedEtfs: EtfRankedEntry[];
+  etfsPromise: Promise<EtfRankedEntry[]>;
 }) {
   const [rate, setRate] = useState(0.08);
+  const [mounted, setMounted] = useState(false);
   const currentAge = CURRENT_YEAR - profile.birthYear;
+  useEffect(() => { setMounted(true); }, []);
 
-  // Profil calculé automatiquement — se reset si le profil utilisateur change
   const computedProfile = useMemo(() => computeRiskProfile(profile), [profile]);
   const [selectedRiskProfile, setSelectedRiskProfile] = useState<RiskProfile>(computedProfile);
   useEffect(() => {
@@ -522,108 +518,130 @@ function ProjectionDashboard({
 
   return (
     <div className="space-y-6">
-      {/* ── 1. Stratégie ETF (en premier) ───────────────────────────────── */}
-      <EtfStrategySection
-        strategy={strategy}
-        rankedEtfs={rankedEtfs}
-        selectedProfile={selectedRiskProfile}
-        onProfileChange={setSelectedRiskProfile}
-      />
+      {/* ── 1. Stratégie ETF — skeleton pendant le chargement des données ── */}
+      <Suspense
+        fallback={
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="h-5 w-48 animate-pulse rounded bg-muted" />
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="h-[9dvh] animate-pulse rounded-xl bg-muted sm:h-24" />
+                ))}
+              </div>
+              <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-muted" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="h-4 w-full animate-pulse rounded-full bg-muted" />
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="h-[8dvh] animate-pulse rounded-lg bg-muted sm:h-20" />
+              ))}
+            </CardContent>
+          </Card>
+        }
+      >
+        <EtfStrategyLoader
+          etfsPromise={etfsPromise}
+          strategy={strategy}
+          selectedProfile={selectedRiskProfile}
+          onProfileChange={setSelectedRiskProfile}
+        />
+      </Suspense>
 
-      {/* ── 2. Résumé chiffré ────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* ── 2. Résumé chiffré — immédiat ─────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Versement mensuel</div>
-            <div className="mt-1 text-2xl font-bold">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Versement mensuel</div>
+            <div className="mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl">
               {profile.monthlyInvestment.toLocaleString("fr-FR")} €
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               {(profile.monthlyInvestment * 12).toLocaleString("fr-FR")} €/an ·{" "}
               {yearsUntilRetirement} ans restants
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Plafond PEA (150 k€)</div>
-            <div className="mt-1 text-2xl font-bold">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Plafond PEA (150 k€)</div>
+            <div className="mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl">
               {profile.currentPeaCapital >= PEA_PLAFOND
                 ? "Déjà atteint"
                 : plafondPoint
                 ? `${plafondPoint.age} ans (${plafondPoint.year})`
                 : "Non atteint"}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               Versements cumulés limités à 150 000 €
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">
               Millionnaire (scénario {Math.round(rate * 100)}%)
             </div>
-            <div className="mt-1 text-2xl font-bold">
+            <div className="mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl">
               {millionPoint ? `${millionPoint.age} ans (${millionPoint.year})` : "—"}
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">
               Patrimoine à {profile.retirementAge} ans
             </div>
-            <div className="mt-1 text-2xl font-bold text-emerald-600">
+            <div className="mt-0.5 text-lg font-bold text-emerald-600 sm:mt-1 sm:text-2xl">
               {retirementPoint ? formatEur(retirementPoint.projectedValue) : "—"}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               Scénario {Math.round(rate * 100)}%/an
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── 3. Métriques avancées ─────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* ── 3. Métriques avancées — immédiat ──────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Revenu mensuel à la retraite</div>
-            <div className="mt-1 text-xl font-bold text-emerald-600">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Revenu mensuel à la retraite</div>
+            <div className="mt-0.5 text-base font-bold text-emerald-600 sm:mt-1 sm:text-xl">
               {monthlyRetirementIncome
                 ? `${monthlyRetirementIncome.toLocaleString("fr-FR")} €/mois`
                 : "—"}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               Règle des 4% · retrait annuel durable
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Économie fiscale PEA vs CTO</div>
-            <div className="mt-1 text-xl font-bold text-blue-600">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Économie fiscale PEA vs CTO</div>
+            <div className="mt-0.5 text-base font-bold text-blue-600 sm:mt-1 sm:text-xl">
               {taxSavings > 0 ? `+${formatEur(taxSavings)}` : "—"}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               PEA : 17,2% PS · CTO : 30% PFU sur plus-values
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-xs text-muted-foreground">Plus-value estimée</div>
-            <div className="mt-1 text-xl font-bold">
+        <Card className="col-span-2 lg:col-span-1">
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Plus-value estimée</div>
+            <div className="mt-0.5 text-base font-bold sm:mt-1 sm:text-xl">
               {retirementPoint ? formatEur(retirementGains) : "—"}
             </div>
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               Valeur portefeuille − total versé
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── 4. Graphique ─────────────────────────────────────────────────── */}
+      {/* ── 4. Graphique — immédiat ────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -646,8 +664,8 @@ function ProjectionDashboard({
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={420}>
-            <AreaChart data={chartData}>
+          {mounted ? <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
               <XAxis
                 dataKey="age"
@@ -703,16 +721,17 @@ function ProjectionDashboard({
                 />
               )}
             </AreaChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer> : <div className="h-[300px] animate-pulse rounded-lg bg-muted" />}
         </CardContent>
       </Card>
 
-      {/* ── 5. Tableau détaillé ──────────────────────────────────────────── */}
+      {/* ── 5. Tableau détaillé — immédiat ───────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle>Projection détaillée ({Math.round(rate * 100)}%/an)</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -762,10 +781,11 @@ function ProjectionDashboard({
                 })}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* ── 6. Notes fiscales ────────────────────────────────────────────── */}
+      {/* ── 6. Notes fiscales — immédiat ──────────────────────────────────── */}
       <Card className="bg-muted/40">
         <CardContent className="p-4">
           <div className="flex items-start gap-2">
@@ -795,7 +815,7 @@ function ProjectionDashboard({
 // Root client component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function PortfolioClient({ etfs }: { etfs: EtfRankedEntry[] }) {
+export function PortfolioClient({ etfsPromise }: { etfsPromise: Promise<EtfRankedEntry[]> }) {
   const { profile, saveProfile, resetProfile, initialized } = useUserProfile();
   const [editing, setEditing] = useState(false);
 
@@ -834,7 +854,7 @@ export function PortfolioClient({ etfs }: { etfs: EtfRankedEntry[] }) {
 
   return (
     <div className="space-y-6">
-      {/* Barre de profil */}
+      {/* Carte de profil — bascule entre affichage et édition sans masquer le dashboard */}
       {editing ? (
         <Card>
           <CardHeader className="pb-3">
@@ -857,50 +877,55 @@ export function PortfolioClient({ etfs }: { etfs: EtfRankedEntry[] }) {
         </Card>
       ) : (
         <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <User className="h-4 w-4 text-primary" />
-              <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-sm">
-                <span>
-                  <span className="text-muted-foreground">Âge : </span>
-                  <strong>{currentAge} ans</strong>
-                </span>
-                <span>
-                  <span className="text-muted-foreground">PEA actuel : </span>
-                  <strong>{profile.currentPeaCapital.toLocaleString("fr-FR")} €</strong>
-                </span>
-                <span>
-                  <span className="text-muted-foreground">Versement : </span>
-                  <strong>{profile.monthlyInvestment.toLocaleString("fr-FR")} €/mois</strong>
-                </span>
-                <span>
-                  <span className="text-muted-foreground">Retraite visée : </span>
-                  <strong>{profile.retirementAge} ans</strong>
-                </span>
+          <CardContent className="p-4">
+            {/* Header row: label + action buttons */}
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <User className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Mon profil</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setEditing(true)}
+                  className="flex items-center gap-1 rounded-md bg-muted px-2.5 py-1 text-xs font-medium hover:bg-accent"
+                >
+                  <Pencil className="h-3 w-3" />
+                  Modifier
+                </button>
+                <button
+                  onClick={resetProfile}
+                  className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+                  title="Réinitialiser le profil"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setEditing(true)}
-                className="flex items-center gap-1 rounded-md bg-muted px-3 py-1.5 text-xs font-medium hover:bg-accent"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Modifier
-              </button>
-              <button
-                onClick={resetProfile}
-                className="flex items-center gap-1 rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
-                title="Réinitialiser le profil"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Réinitialiser
-              </button>
+            {/* Stat chips: 2×2 on mobile, 4 cols on sm+ */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg bg-muted/50 px-3 py-2">
+                <div className="text-[10px] text-muted-foreground">Âge</div>
+                <div className="text-sm font-bold">{currentAge} ans</div>
+              </div>
+              <div className="rounded-lg bg-muted/50 px-3 py-2">
+                <div className="text-[10px] text-muted-foreground">PEA actuel</div>
+                <div className="text-sm font-bold">{profile.currentPeaCapital.toLocaleString("fr-FR")} €</div>
+              </div>
+              <div className="rounded-lg bg-muted/50 px-3 py-2">
+                <div className="text-[10px] text-muted-foreground">Versement</div>
+                <div className="text-sm font-bold">{profile.monthlyInvestment.toLocaleString("fr-FR")} €<span className="text-xs font-normal text-muted-foreground">/mois</span></div>
+              </div>
+              <div className="rounded-lg bg-muted/50 px-3 py-2">
+                <div className="text-[10px] text-muted-foreground">Retraite visée</div>
+                <div className="text-sm font-bold">{profile.retirementAge} ans</div>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {!editing && <ProjectionDashboard profile={profile} rankedEtfs={etfs} />}
+      {/* Projection — toujours visible, même en mode édition */}
+      <ProjectionDashboard profile={profile} etfsPromise={etfsPromise} />
     </div>
   );
 }
