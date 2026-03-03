@@ -224,7 +224,7 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
             </span>
           )}
           {isComplete && !loading && lastUpdated && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground" suppressHydrationWarning>
               Mise à jour {formatRelativeTime(lastUpdated)}
             </span>
           )}

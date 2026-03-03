@@ -43,7 +43,7 @@ export type BaseCatalogEntry = {
 // Correspond aux 7 ETFs utilisés dans FALLBACK_ETF de portfolio-strategy.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SEED_CATALOG: BaseCatalogEntry[] = [
+export const SEED_CATALOG: BaseCatalogEntry[] = [
   { isin: "IE0002XZSHO1", yahooTicker: "WPEA.PA",  category: "World",    index: "MSCI World",                   ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0011871128", yahooTicker: "PSP5.PA",  category: "US",       index: "S&P 500",                      ter: 0.0012, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0011550193", yahooTicker: "ETZ.PA",   category: "Europe",   index: "STOXX Europe 600",             ter: 0.0019, distribution: "ACC",  replication: "Synthetic", leveraged: false },

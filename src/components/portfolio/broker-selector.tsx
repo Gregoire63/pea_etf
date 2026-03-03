@@ -72,7 +72,7 @@ export function BrokerSelector({
         <span className="text-[10px] text-muted-foreground">Courtier</span>
       </div>
       <Select
-        value={value ?? undefined}
+        value={value ?? ""}
         onValueChange={(v) => onChange(v as BrokerId)}
       >
         <SelectTrigger className="w-full text-sm">

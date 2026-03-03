@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { getCatalog } from "@/lib/etf-catalog";
+import { SEED_CATALOG } from "@/lib/etf-catalog";
 import { CategoryBadge } from "@/components/dashboard/category-badge";
 import { Badge } from "@/components/ui/badge";
 import { EtfDetailLive } from "./etf-detail-live";
@@ -9,16 +9,11 @@ import { ArrowLeft } from "lucide-react";
 export const revalidate = 3600;
 
 /**
- * Pré-génère les pages ETF au build. Si Euronext est inaccessible au build,
- * retourne [] et les pages sont rendues à la demande (ISR).
+ * generateStaticParams désactivé — les pages sont rendues à la demande (ISR).
+ * En dev, getCatalog() prenait ~16s (Euronext + JustETF) et bloquait chaque navigation.
  */
 export async function generateStaticParams() {
-  try {
-    const catalog = await getCatalog();
-    return catalog.map((etf) => ({ isin: etf.isin }));
-  } catch {
-    return [];
-  }
+  return [];
 }
 
 export async function generateMetadata({
@@ -28,8 +23,8 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { isin } = await params;
 
-  const catalog = await getCatalog();
-  const entry = catalog.find((e) => e.isin === isin);
+  // Lookup instantané dans le seed catalog (pas de fetch externe)
+  const entry = SEED_CATALOG.find((e) => e.isin === isin);
   if (entry) {
     const ticker = entry.yahooTicker.replace(".PA", "");
     return {
@@ -38,7 +33,11 @@ export async function generateMetadata({
     };
   }
 
-  return { title: "ETF introuvable" };
+  // ETF hors seed : titre générique, le client enrichira
+  return {
+    title: `${isin} — ETF PEA`,
+    description: `Fiche détaillée ETF éligible PEA — ISIN ${isin}.`,
+  };
 }
 
 export default async function EtfDetailPage({
@@ -48,23 +47,9 @@ export default async function EtfDetailPage({
 }) {
   const { isin } = await params;
 
-  // Données catalogue uniquement (instantané, pas de fetch externe bloquant)
-  const catalog = await getCatalog();
-  const catalogEntry = catalog.find((e) => e.isin === isin);
-
-  if (!catalogEntry) {
-    return (
-      <div className="py-20 text-center">
-        <h1 className="text-xl font-bold">ETF non trouve</h1>
-        <p className="text-muted-foreground">ISIN : {isin}</p>
-        <Link href="/" className="mt-4 inline-block text-primary underline">
-          Retour au classement
-        </Link>
-      </div>
-    );
-  }
-
-  const ticker = catalogEntry.yahooTicker.replace(".PA", "");
+  // Lookup instantané — aucun fetch réseau
+  const catalogEntry = SEED_CATALOG.find((e) => e.isin === isin);
+  const ticker = catalogEntry?.yahooTicker.replace(".PA", "") ?? isin;
 
   return (
     <div className="space-y-6">
@@ -72,25 +57,32 @@ export default async function EtfDetailPage({
         <ArrowLeft className="h-4 w-4" /> Retour au classement
       </Link>
 
-      {/* ── Badges catalogue — s'affichent immédiatement ────────────── */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <CategoryBadge category={catalogEntry.category} />
-        {catalogEntry.leveraged && (
-          <Badge variant="destructive">Levier x{catalogEntry.leverageMultiplier}</Badge>
-        )}
-        <span className="text-xs text-muted-foreground">
-          {ticker} · {isin}
-        </span>
-      </div>
+      {/* Badges catalogue (si disponible dans le seed) */}
+      {catalogEntry && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <CategoryBadge category={catalogEntry.category} />
+          {catalogEntry.leveraged && (
+            <Badge variant="destructive">Levier x{catalogEntry.leverageMultiplier}</Badge>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {ticker} · {isin}
+          </span>
+        </div>
+      )}
 
-      {/* ── Contenu dynamique (client-side : header + métriques + chart) */}
+      {/* Si pas dans le seed, afficher juste l'ISIN (le client chargera le reste) */}
+      {!catalogEntry && (
+        <div className="text-xs text-muted-foreground">{isin}</div>
+      )}
+
+      {/* Contenu dynamique (client-side : header + métriques + chart) */}
       <EtfDetailLive
         isin={isin}
         ticker={ticker}
-        catalogTer={catalogEntry.ter}
-        catalogDistribution={catalogEntry.distribution}
-        catalogReplication={catalogEntry.replication}
-        catalogIndex={catalogEntry.index}
+        catalogTer={catalogEntry?.ter ?? 0}
+        catalogDistribution={catalogEntry?.distribution ?? "ACC"}
+        catalogReplication={catalogEntry?.replication ?? "Physical"}
+        catalogIndex={catalogEntry?.index ?? ""}
       />
     </div>
   );
