@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { TrendingUp, TrendingDown, Minus, Wifi, WifiOff, BarChart3, Globe, DollarSign } from "lucide-react";
+import { isMarketOpen } from "@/lib/market-hours";
 
 interface MarketIndex {
   symbol: string;
@@ -188,16 +189,6 @@ function MarketSection({ type, items, className }: { type: MarketIndex["type"]; 
 
 const POLL_INTERVAL = 30_000;
 
-function isMarketOpen(): boolean {
-  const now = new Date();
-  const paris = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Paris" }));
-  const day = paris.getDay();
-  if (day === 0 || day === 6) return false;
-  const h = paris.getHours();
-  const m = paris.getMinutes();
-  const time = h * 60 + m;
-  return time >= 540 && time <= 1050;
-}
 
 export function MarketSummary() {
   const [indices, setIndices] = useState<MarketIndex[]>([]);

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
 import { BrokerLinksPanel } from "@/components/etf/broker-links-panel";
 import { EtfDetailChart } from "./chart";
+import { isMarketOpen } from "@/lib/market-hours";
+import { Wifi, WifiOff } from "lucide-react";
 import type { EtfRankedEntry, PricePoint, DataSourceName } from "@/types/etf";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,19 +50,27 @@ function SourceBadge({ source }: { source?: DataSourceName }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Skeleton components
+// Live price types
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MetricSkeleton() {
-  return (
-    <Card>
-      <CardContent className="p-2 sm:p-4">
-        <div className="h-3 w-12 animate-pulse rounded bg-muted sm:h-4 sm:w-16" />
-        <div className="mt-1.5 h-5 w-16 animate-pulse rounded bg-muted sm:mt-2 sm:h-6 sm:w-20" />
-      </CardContent>
-    </Card>
-  );
+const POLL_INTERVAL = 30_000;
+
+interface LivePriceData {
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  previousClose: number | null;
+  volume: number | null;
+  fiftyTwoWeekHigh: number | null;
+  fiftyTwoWeekLow: number | null;
+  timestamp: string;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Skeleton components
+// ─────────────────────────────────────────────────────────────────────────────
 
 function ScoreBreakdownSkeleton() {
   return (
@@ -113,6 +123,50 @@ export function EtfDetailLive({
   const [prices, setPrices] = useState<PricePoint[] | null>(null);
   const [error, setError] = useState(false);
 
+  // ── Live price polling ──────────────────────────────────────────────────
+  const [livePrice, setLivePrice] = useState<LivePriceData | null>(null);
+  const [live, setLive] = useState(false);
+  const [lastPriceRefresh, setLastPriceRefresh] = useState<Date | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchLivePrice = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/etf/${encodeURIComponent(isin)}/price`);
+      if (res.ok) {
+        const data: LivePriceData = await res.json();
+        setLivePrice(data);
+        setLastPriceRefresh(new Date());
+      }
+    } catch {
+      // Silently fail — stale price remains visible
+    }
+  }, [isin]);
+
+  const startPolling = useCallback(() => {
+    if (intervalRef.current) return;
+    intervalRef.current = setInterval(() => {
+      if (isMarketOpen()) fetchLivePrice();
+    }, POLL_INTERVAL);
+    setLive(true);
+  }, [fetchLivePrice]);
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setLive(false);
+  }, []);
+
+  const toggleLive = useCallback(() => {
+    if (live) stopPolling();
+    else {
+      fetchLivePrice();
+      startPolling();
+    }
+  }, [live, fetchLivePrice, startPolling, stopPolling]);
+
+  // ── Initial data load ───────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -136,13 +190,62 @@ export function EtfDetailLive({
     return () => { cancelled = true; };
   }, [isin]);
 
+  // ── Start live polling when data is loaded and market open ──────────────
+  useEffect(() => {
+    if (!etf) return;
+    if (isMarketOpen()) {
+      fetchLivePrice();
+      startPolling();
+    }
+    return () => stopPolling();
+  }, [etf, fetchLivePrice, startPolling, stopPolling]);
+
+  // ── Computed price values ───────────────────────────────────────────────
+  const currentDisplayPrice = livePrice?.price ?? etf?.currentPrice ?? null;
+  const dailyChange = livePrice?.change ?? null;
+  const dailyChangePercent = livePrice?.changePercent ?? null;
+  const priceColor = dailyChangePercent !== null
+    ? dailyChangePercent >= 0 ? "text-emerald-600" : "text-red-600"
+    : "";
+
   // ── Métriques : skeleton ou données ─────────────────────────────────────
 
   const metricsLoaded = etf !== null;
 
-  const metrics: { label: React.ReactNode; value: string; className?: string }[] = metricsLoaded
+  const metrics: { label: React.ReactNode; value: string; className?: string; sub?: string }[] = metricsLoaded
     ? [
-        { label: "Prix actuel", value: etf.currentPrice ? `${etf.currentPrice.toFixed(2)} €` : "—" },
+        {
+          label: (
+            <span className="flex items-center gap-1">
+              Prix actuel
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleLive(); }}
+                className={`flex items-center gap-0.5 rounded p-0.5 text-[9px] transition-colors ${
+                  live
+                    ? "text-emerald-600 hover:bg-emerald-500/10"
+                    : "text-muted-foreground hover:bg-muted"
+                }`}
+                title={live ? "Désactiver le temps réel" : "Activer le temps réel (30s)"}
+              >
+                {live ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              </button>
+              {live && (
+                <span className="flex items-center gap-0.5 text-[9px] font-semibold text-emerald-600">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                  LIVE
+                </span>
+              )}
+            </span>
+          ),
+          value: currentDisplayPrice ? `${currentDisplayPrice.toFixed(2)} €` : "—",
+          className: priceColor,
+          sub: dailyChange !== null && dailyChangePercent !== null
+            ? `${dailyChange >= 0 ? "+" : ""}${dailyChange.toFixed(2)} (${dailyChangePercent >= 0 ? "+" : ""}${dailyChangePercent.toFixed(2)}%)`
+            : undefined,
+        },
         {
           label: (
             <span className="flex items-center gap-0.5">
@@ -291,6 +394,11 @@ export function EtfDetailLive({
                 <CardContent className="p-2 sm:p-4">
                   <div className="text-[10px] leading-tight text-muted-foreground sm:text-xs sm:leading-normal">{m.label}</div>
                   <div className={`mt-0.5 text-sm font-semibold leading-tight sm:mt-1 sm:text-base lg:text-lg ${m.className ?? ""}`}>{m.value}</div>
+                  {m.sub && (
+                    <div className={`text-[9px] tabular-nums sm:text-[10px] ${m.className ?? ""}`}>
+                      {m.sub}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))
@@ -309,6 +417,17 @@ export function EtfDetailLive({
               </Card>
             ))}
       </div>
+
+      {/* ── Last refresh timestamp ─────────────────────────────────── */}
+      {lastPriceRefresh && live && (
+        <div className="text-right text-[10px] tabular-nums text-muted-foreground">
+          Dernière mise à jour : {lastPriceRefresh.toLocaleTimeString("fr-FR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
+        </div>
+      )}
 
       <Separator />
 

@@ -251,6 +251,12 @@ function getPriceCache() {
   return g.__priceCache;
 }
 
+/** Pre-warm the historical price cache for a given ticker. Used by the refresh cron. */
+export function setHistoricalPriceCache(ticker: string, prices: PricePoint[]): void {
+  const cache = getPriceCache();
+  cache.set(ticker, { data: prices, timestamp: Date.now() });
+}
+
 export async function getHistoricalPricesForIsin(isin: string, years: number = 10): Promise<PricePoint[]> {
   const catalog = await getCatalog();
   const etf = catalog.find((e) => e.isin === isin);

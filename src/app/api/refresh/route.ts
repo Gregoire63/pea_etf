@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { refreshAllEtfs } from "@/lib/etf-data";
+import { refreshAllEtfs, setHistoricalPriceCache } from "@/lib/etf-data";
+import { fetchAllHistoricalPrices } from "@/lib/yahoo-finance";
 import { clearCache, getCacheTimestamp } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,21 @@ export async function POST(request: Request) {
     const etfs = await refreshAllEtfs();
     const timestamp = getCacheTimestamp() ?? new Date().toISOString();
 
-    // 3. Revalider les pages ISR pour qu'elles utilisent les nouvelles données
+    // 3. Pré-chauffer les prix historiques (10 ans) pour toutes les pages détail
+    const tickers = etfs.map((e) => e.yahooTicker);
+    const allPrices = await fetchAllHistoricalPrices(tickers, 10);
+    let priceWarmCount = 0;
+    for (const [ticker, prices] of allPrices) {
+      if (prices.length > 0) {
+        setHistoricalPriceCache(ticker, prices);
+        priceWarmCount++;
+      }
+    }
+    console.info(
+      `[Refresh] Pre-warmed historical prices for ${priceWarmCount}/${tickers.length} ETFs`,
+    );
+
+    // 4. Revalider les pages ISR pour qu'elles utilisent les nouvelles données
     revalidatePath("/");
     revalidatePath("/etf/[isin]", "page");
     revalidatePath("/compare");
@@ -34,6 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       count: etfs.length,
+      pricesWarmed: priceWarmCount,
       timestamp,
     });
   } catch (error) {
