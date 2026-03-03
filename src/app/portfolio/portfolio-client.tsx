@@ -27,6 +27,7 @@ import {
   computeRiskProfile,
   type PortfolioStrategy,
   type RiskProfile,
+  type StrategyEtf,
 } from "@/lib/portfolio-strategy";
 import { useUserProfile, type UserProfile } from "@/hooks/use-user-profile";
 import { useBroker } from "@/hooks/use-broker";
@@ -44,7 +45,7 @@ import { useManagementMode, type ManagementMode } from "@/hooks/use-management-m
 import { ManagementModeToggle } from "@/components/portfolio/management-mode-toggle";
 import { ManagedProfileCard } from "@/components/portfolio/managed-profile-card";
 import Link from "next/link";
-import { User, RotateCcw, Pencil, Save, Info, TrendingUp, ShieldCheck, Flame, AlertTriangle } from "lucide-react";
+import { User, RotateCcw, Pencil, Save, Info, TrendingUp, ShieldCheck, Flame, AlertTriangle, Zap } from "lucide-react";
 
 const RATES = [0.06, 0.08, 0.10];
 const RATE_COLORS: Record<string, string> = {
@@ -282,6 +283,134 @@ const BAR_COLORS      = ["bg-primary", "bg-blue-500", "bg-emerald-500", "bg-ambe
 const BAR_TEXT_COLORS = ["text-primary-foreground", "text-white", "text-white", "text-white"];
 const TEXT_COLORS = ["text-primary", "text-blue-600", "text-emerald-600", "text-amber-500"];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Market timing signals — analyse des conditions d'entrée
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MarketSignal {
+  label: string;
+  className: string;
+  type: "opportunity" | "neutral" | "caution";
+  score: number;
+}
+
+function getMarketSignals(live: EtfRankedEntry): MarketSignal[] {
+  const signals: MarketSignal[] = [];
+
+  // YTD
+  if (live.ytdReturn !== null) {
+    if (live.ytdReturn <= -0.10) {
+      signals.push({
+        label: `${(live.ytdReturn * 100).toFixed(1)}% YTD`,
+        className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+        type: "opportunity",
+        score: 10,
+      });
+    } else if (live.ytdReturn <= -0.05) {
+      signals.push({
+        label: `${(live.ytdReturn * 100).toFixed(1)}% YTD`,
+        className: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+        type: "opportunity",
+        score: 5,
+      });
+    } else if (live.ytdReturn <= -0.03) {
+      signals.push({
+        label: `${(live.ytdReturn * 100).toFixed(1)}% YTD`,
+        className: "bg-sky-50 text-sky-600 dark:bg-sky-900/30 dark:text-sky-300",
+        type: "opportunity",
+        score: 3,
+      });
+    } else if (live.ytdReturn >= 0.15) {
+      signals.push({
+        label: `+${(live.ytdReturn * 100).toFixed(1)}% YTD`,
+        className: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
+        type: "neutral",
+        score: 0,
+      });
+    }
+  }
+
+  // 52-week high proximity
+  if (live.currentPrice !== null && live.fiftyTwoWeekHigh !== null) {
+    const fromHigh = ((live.currentPrice - live.fiftyTwoWeekHigh) / live.fiftyTwoWeekHigh) * 100;
+    if (fromHigh > -3) {
+      signals.push({
+        label: "Proche du pic annuel",
+        className: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+        type: "caution",
+        score: -5,
+      });
+    } else if (fromHigh < -15) {
+      signals.push({
+        label: `${fromHigh.toFixed(0)}% vs pic annuel`,
+        className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+        type: "opportunity",
+        score: 10,
+      });
+    } else if (fromHigh < -10) {
+      signals.push({
+        label: `${fromHigh.toFixed(0)}% vs pic annuel`,
+        className: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+        type: "opportunity",
+        score: 5,
+      });
+    } else if (fromHigh < -5) {
+      signals.push({
+        label: `${fromHigh.toFixed(0)}% vs pic annuel`,
+        className: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+        type: "neutral",
+        score: 3,
+      });
+    }
+  }
+
+  return signals;
+}
+
+interface MarketOpportunity {
+  etf: StrategyEtf;
+  live: EtfRankedEntry;
+  signals: MarketSignal[];
+  score: number;
+  reason: string;
+}
+
+function findBestOpportunity(
+  strategyEtfs: StrategyEtf[],
+  rankedEtfs: EtfRankedEntry[],
+): MarketOpportunity | null {
+  let best: MarketOpportunity | null = null;
+
+  for (const etf of strategyEtfs) {
+    const live = rankedEtfs.find((r) => r.isin === etf.isin);
+    if (!live || !live.currentPrice) continue;
+
+    const signals = getMarketSignals(live);
+    const score = signals.reduce((sum, s) => sum + s.score, 0);
+
+    if (!best || score > best.score) {
+      const reasons: string[] = [];
+      if (live.ytdReturn !== null && live.ytdReturn < -0.03) {
+        reasons.push(`en baisse de ${(live.ytdReturn * 100).toFixed(1)}% depuis le début d'année`);
+      }
+      if (live.currentPrice && live.fiftyTwoWeekHigh) {
+        const fromHigh = ((live.currentPrice - live.fiftyTwoWeekHigh) / live.fiftyTwoWeekHigh) * 100;
+        if (fromHigh < -5) {
+          reasons.push(`à ${fromHigh.toFixed(0)}% de son plus haut annuel`);
+        }
+      }
+
+      const reason = reasons.length > 0
+        ? `${etf.shortName} est ${reasons.join(" et ")} — point d'entrée favorable pour renforcer cette ligne.`
+        : `${etf.shortName} présente les meilleures conditions parmi vos ETFs.`;
+
+      best = { etf, live, signals, score, reason };
+    }
+  }
+
+  return best && best.score > 3 ? best : null;
+}
+
 function EtfStrategySection({
   strategy,
   rankedEtfs,
@@ -293,6 +422,11 @@ function EtfStrategySection({
   selectedProfile: RiskProfile;
   onProfileChange: (p: RiskProfile) => void;
 }) {
+  const opportunity = useMemo(
+    () => findBestOpportunity(strategy.etfs, rankedEtfs),
+    [strategy.etfs, rankedEtfs]
+  );
+
   return (
     <Card>
       <CardHeader className="pb-4">
@@ -369,6 +503,32 @@ function EtfStrategySection({
           </div>
         </div>
 
+        {/* ── Opportunité du mois ───────────────────────────────────────── */}
+        {opportunity && (
+          <div className="rounded-xl border-2 border-blue-200 bg-blue-50/50 p-4 dark:border-blue-800/50 dark:bg-blue-950/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">
+                Opportunité du mois
+              </span>
+            </div>
+            <p className="text-sm text-blue-700 dark:text-blue-400 leading-relaxed">
+              {opportunity.reason}
+            </p>
+            {opportunity.signals.filter((s) => s.type === "opportunity").length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {opportunity.signals
+                  .filter((s) => s.type === "opportunity")
+                  .map((s) => (
+                    <span key={s.label} className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${s.className}`}>
+                      {s.label}
+                    </span>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── ETF cards ─────────────────────────────────────────────────── */}
         <div className="divide-y rounded-lg border">
           {strategy.etfs.map((etf, i) => {
@@ -413,6 +573,11 @@ function EtfStrategySection({
                         3ans {live.return3y >= 0 ? "+" : ""}{(live.return3y * 100).toFixed(1)}%
                       </span>
                     )}
+                    {getMarketSignals(live).map((s) => (
+                      <span key={s.label} className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${s.className}`}>
+                        {s.label}
+                      </span>
+                    ))}
                   </div>
                 )}
 
@@ -521,6 +686,8 @@ function PurchasePlanLoader({
           currentPrice: live.currentPrice,
           ytdReturn: live.ytdReturn ?? null,
           return1y: live.return1y ?? null,
+          fiftyTwoWeekHigh: live.fiftyTwoWeekHigh ?? null,
+          fiftyTwoWeekLow: live.fiftyTwoWeekLow ?? null,
         };
       })
       .filter((p): p is EtfPriceInfo => p !== null);

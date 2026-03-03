@@ -21,6 +21,10 @@ export interface EtfPriceInfo {
   ytdReturn: number | null;
   /** Performance 1 an */
   return1y: number | null;
+  /** Plus haut 52 semaines */
+  fiftyTwoWeekHigh: number | null;
+  /** Plus bas 52 semaines */
+  fiftyTwoWeekLow: number | null;
 }
 
 interface PlanInput {
@@ -141,23 +145,39 @@ function buildReason(
   isGreedyPass: boolean,
 ): string {
   const ytd = price.ytdReturn;
+  const fromHigh = price.fiftyTwoWeekHigh && price.currentPrice
+    ? ((price.currentPrice - price.fiftyTwoWeekHigh) / price.fiftyTwoWeekHigh) * 100
+    : null;
 
   // Under-weight reason (primary for greedy pass — rebalancing first)
   if (isGreedyPass && totalAllocated > 0) {
     const actualPct = (currentAlloc / totalAllocated) * 100;
     if (actualPct < weight * 0.7) {
-      const reason = `Rééquilibrage (${actualPct.toFixed(0)} % vs ${weight} % cible)`;
+      const parts = [`Rééquilibrage (${actualPct.toFixed(0)} % vs ${weight} % cible)`];
       if (ytd !== null && ytd < -0.02) {
-        return `${reason} · en baisse YTD (${(ytd * 100).toFixed(1)} %)`;
+        parts.push(`en baisse YTD (${(ytd * 100).toFixed(1)} %)`);
       }
-      return reason;
+      if (fromHigh !== null && fromHigh < -10) {
+        parts.push(`${fromHigh.toFixed(0)} % vs pic annuel`);
+      }
+      return parts.join(" · ");
     }
   }
 
   // Momentum-based reason (dip buying)
   if (ytd !== null && ytd < -0.02) {
-    const pct = (ytd * 100).toFixed(1);
-    return `En baisse YTD (${pct} %), bon point d'entrée`;
+    const parts = [`En baisse YTD (${(ytd * 100).toFixed(1)} %)`];
+    if (fromHigh !== null && fromHigh < -10) {
+      parts.push(`${fromHigh.toFixed(0)} % vs pic annuel — bon point d'entrée`);
+    } else {
+      parts.push("bon point d'entrée");
+    }
+    return parts.join(", ");
+  }
+
+  // 52-week context
+  if (fromHigh !== null && fromHigh < -10) {
+    return `Décote de ${fromHigh.toFixed(0)} % vs pic annuel, allocation cible ${weight} %`;
   }
 
   // Default proportional reason
@@ -399,9 +419,15 @@ function computeRotation(
       if (totalCost + fee > remaining) continue;
 
       const ytd = price.ytdReturn;
+      const fromHighR = price.fiftyTwoWeekHigh && price.currentPrice
+        ? ((price.currentPrice - price.fiftyTwoWeekHigh) / price.fiftyTwoWeekHigh) * 100
+        : null;
       let reason = `Cagnotte accumulée (${fmtEurInternal(pot)} €)`;
       if (ytd !== null && ytd < -0.02) {
         reason += ` · En baisse YTD (${(ytd * 100).toFixed(1)} %)`;
+      }
+      if (fromHighR !== null && fromHighR < -10) {
+        reason += ` · ${fromHighR.toFixed(0)} % vs pic annuel`;
       }
 
       purchases.push({
@@ -488,9 +514,15 @@ function computeRotation(
         const { etf, price, shares: newShares, cost, fee } = bestAction;
         const pot = pots.get(etf.isin) ?? 0;
         const ytd = price.ytdReturn;
+        const fromHighS = price.fiftyTwoWeekHigh && price.currentPrice
+          ? ((price.currentPrice - price.fiftyTwoWeekHigh) / price.fiftyTwoWeekHigh) * 100
+          : null;
         let reason = `Achat anticipé (surplus ${fmtEurInternal(remaining)} €)`;
         if (ytd !== null && ytd < -0.02) {
           reason += ` · En baisse YTD (${(ytd * 100).toFixed(1)} %)`;
+        }
+        if (fromHighS !== null && fromHighS < -10) {
+          reason += ` · ${fromHighS.toFixed(0)} % vs pic annuel`;
         }
         purchases.push({
           isin: etf.isin,
