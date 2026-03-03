@@ -1,19 +1,25 @@
-import type React from "react";
-import { Suspense } from "react";
 import type { Metadata } from "next";
-import { getAllEtfsRanked, getEtfByIsin } from "@/lib/etf-data";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { HintTooltip } from "@/components/ui/hint-tooltip";
-import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
+import { getCatalog } from "@/lib/etf-catalog";
 import { CategoryBadge } from "@/components/dashboard/category-badge";
-import { PriceChartSection } from "./price-chart-section";
-import { BrokerLinksPanel } from "@/components/etf/broker-links-panel";
+import { Badge } from "@/components/ui/badge";
+import { EtfDetailLive } from "./etf-detail-live";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export const revalidate = 3600;
+
+/**
+ * Pré-génère les pages ETF au build. Si Euronext est inaccessible au build,
+ * retourne [] et les pages sont rendues à la demande (ISR).
+ */
+export async function generateStaticParams() {
+  try {
+    const catalog = await getCatalog();
+    return catalog.map((etf) => ({ isin: etf.isin }));
+  } catch {
+    return [];
+  }
+}
 
 export async function generateMetadata({
   params,
@@ -21,34 +27,18 @@ export async function generateMetadata({
   params: Promise<{ isin: string }>;
 }): Promise<Metadata> {
   const { isin } = await params;
-  const etfs = await getAllEtfsRanked();
-  const etf = getEtfByIsin(etfs, isin);
 
-  if (!etf) return { title: "ETF introuvable" };
+  const catalog = await getCatalog();
+  const entry = catalog.find((e) => e.isin === isin);
+  if (entry) {
+    const ticker = entry.yahooTicker.replace(".PA", "");
+    return {
+      title: `${ticker} — ETF PEA`,
+      description: `Fiche détaillée ${ticker} (${isin}) — TER ${(entry.ter * 100).toFixed(2)}% · ${entry.distribution} · ${entry.category}. Analyse complète ETF éligible PEA.`,
+    };
+  }
 
-  const perf1y = etf.return1y !== null ? `${(etf.return1y * 100).toFixed(1)}%` : "—";
-  const description = `${etf.name} (${etf.ticker}) — Score ${etf.score.toFixed(0)}/100 · TER ${(etf.ter * 100).toFixed(2)}% · Perf 1 an : ${perf1y}. Analyse complète ETF éligible PEA.`;
-
-  return {
-    title: etf.shortName,
-    description,
-    openGraph: {
-      title: `${etf.shortName} — ETF PEA`,
-      description,
-    },
-  };
-}
-
-function fmt(val: number | null, decimals = 2): string {
-  if (val === null) return "—";
-  return `${(val * 100).toFixed(decimals)}%`;
-}
-
-function fmtAum(val: number | null): string {
-  if (val === null) return "—";
-  if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)} Md EUR`;
-  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(0)} M EUR`;
-  return `${val.toLocaleString("fr-FR")} EUR`;
+  return { title: "ETF introuvable" };
 }
 
 export default async function EtfDetailPage({
@@ -57,10 +47,12 @@ export default async function EtfDetailPage({
   params: Promise<{ isin: string }>;
 }) {
   const { isin } = await params;
-  const etfs = await getAllEtfsRanked();
-  const etf = getEtfByIsin(etfs, isin);
 
-  if (!etf) {
+  // Données catalogue uniquement (instantané, pas de fetch externe bloquant)
+  const catalog = await getCatalog();
+  const catalogEntry = catalog.find((e) => e.isin === isin);
+
+  if (!catalogEntry) {
     return (
       <div className="py-20 text-center">
         <h1 className="text-xl font-bold">ETF non trouve</h1>
@@ -72,94 +64,7 @@ export default async function EtfDetailPage({
     );
   }
 
-  const metrics: { label: React.ReactNode; value: string }[] = [
-    { label: "Prix actuel", value: etf.currentPrice ? `${etf.currentPrice.toFixed(2)} EUR` : "—" },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          TER
-          <HintTooltip content="Total Expense Ratio — frais annuels de gestion déduits automatiquement de la valeur de l'ETF. Plus c'est bas, mieux c'est." />
-        </span>
-      ),
-      value: `${(etf.ter * 100).toFixed(2)}%`,
-    },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          Encours
-          <HintTooltip content="Actifs sous gestion (AUM). Un encours élevé garantit une meilleure liquidité et des spreads bid/ask plus faibles." />
-        </span>
-      ),
-      value: fmtAum(etf.aum),
-    },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          Distribution
-          <HintTooltip content="ACC (Capitalisant) : les dividendes sont réinvestis automatiquement. DIST (Distribuant) : les dividendes vous sont versés." />
-        </span>
-      ),
-      value: etf.distribution,
-    },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          Réplication
-          <HintTooltip content="Physique : l'ETF achète directement les actions de l'indice. Synthétique (Swap) : réplication via des contrats dérivés — nécessaire pour l'éligibilité PEA des indices non-européens (MSCI World, S&P 500…)." />
-        </span>
-      ),
-      value: etf.replication,
-    },
-    { label: "Indice", value: etf.index },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          YTD
-          <HintTooltip content="Year-to-Date — performance depuis le 1er janvier de l'année en cours." />
-        </span>
-      ),
-      value: fmt(etf.ytdReturn),
-    },
-    { label: "1 an", value: fmt(etf.return1y) },
-    { label: "3 ans (ann.)", value: fmt(etf.return3y) },
-    { label: "5 ans (ann.)", value: fmt(etf.return5y) },
-    { label: "10 ans (ann.)", value: fmt(etf.return10y) },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          Max Drawdown
-          <HintTooltip content="Pire baisse enregistrée depuis un pic historique jusqu'au creux suivant. Mesure le risque maximal de perte en capital." />
-        </span>
-      ),
-      value: fmt(etf.maxDrawdown),
-    },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          Volatilité
-          <HintTooltip content="Volatilité annualisée — écart-type des rendements hebdomadaires × √52. Mesure l'amplitude des variations de prix." />
-        </span>
-      ),
-      value: fmt(etf.volatility1y),
-    },
-    {
-      label: (
-        <span className="flex items-center gap-0.5">
-          Sharpe Ratio
-          <HintTooltip content="Ratio de Sharpe = rendement / volatilité. Mesure la performance ajustée au risque. Un ratio > 1 est considéré bon ; > 2 est excellent." />
-        </span>
-      ),
-      value: etf.sharpeRatio !== null ? etf.sharpeRatio.toFixed(2) : "—",
-    },
-  ];
-
-  const breakdown = [
-    { label: "TER", value: etf.scoreBreakdown.terScore, weight: "20%" },
-    { label: "Performance", value: etf.scoreBreakdown.performanceScore, weight: "30%" },
-    { label: "Encours", value: etf.scoreBreakdown.aumScore, weight: "15%" },
-    { label: "Sharpe", value: etf.scoreBreakdown.sharpeScore, weight: "20%" },
-    { label: "Drawdown", value: etf.scoreBreakdown.drawdownScore, weight: "15%" },
-  ];
+  const ticker = catalogEntry.yahooTicker.replace(".PA", "");
 
   return (
     <div className="space-y-6">
@@ -167,73 +72,26 @@ export default async function EtfDetailPage({
         <ArrowLeft className="h-4 w-4" /> Retour au classement
       </Link>
 
-      <div className="space-y-1.5">
-        {/* Ligne 1 : titre + rang */}
-        <div className="flex items-start justify-between gap-2">
-          <h1 className="text-xl font-bold leading-tight sm:text-2xl">{etf.shortName}</h1>
-          <div className="shrink-0 text-right">
-            <div className="text-[10px] text-muted-foreground">Rang</div>
-            <div className="text-2xl font-bold leading-none sm:text-3xl">#{etf.rank}</div>
-          </div>
-        </div>
-        {/* Ligne 2 : badges */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <EtfScoreBadge score={etf.score} />
-          <CategoryBadge category={etf.category} />
-          {etf.leveraged && (
-            <Badge variant="destructive">Levier x{etf.leverageMultiplier}</Badge>
-          )}
-        </div>
-        {/* Ligne 3 : métadonnées compactes */}
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">{etf.ticker}</span>
-          {" · "}{etf.isin}
-          {" · "}{etf.issuer}
-        </p>
+      {/* ── Badges catalogue — s'affichent immédiatement ────────────── */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <CategoryBadge category={catalogEntry.category} />
+        {catalogEntry.leveraged && (
+          <Badge variant="destructive">Levier x{catalogEntry.leverageMultiplier}</Badge>
+        )}
+        <span className="text-xs text-muted-foreground">
+          {ticker} · {isin}
+        </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
-        {metrics.map((m, i) => (
-          <Card key={i}>
-            <CardContent className="p-2 sm:p-4">
-              <div className="text-[10px] leading-tight text-muted-foreground sm:text-xs sm:leading-normal">{m.label}</div>
-              <div className="mt-0.5 text-sm font-semibold leading-tight sm:mt-1 sm:text-base lg:text-lg">{m.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Separator />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Détail du score : {etf.score.toFixed(1)} / 100</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {breakdown.map((b) => (
-              <div key={b.label} className="flex items-center gap-3">
-                <div className="w-28 text-sm">{b.label} ({b.weight})</div>
-                <div className="flex-1">
-                  <div className="h-3 w-full rounded-full bg-muted">
-                    <div
-                      className="h-3 rounded-full bg-primary transition-all"
-                      style={{ width: `${b.value}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="w-10 text-right text-sm font-mono">{b.value}</div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Suspense fallback={<div className="h-80 animate-pulse rounded-lg border bg-muted" />}>
-        <PriceChartSection isin={isin} ticker={etf.ticker} />
-      </Suspense>
-
-      <BrokerLinksPanel ticker={etf.ticker} isin={etf.isin} />
+      {/* ── Contenu dynamique (client-side : header + métriques + chart) */}
+      <EtfDetailLive
+        isin={isin}
+        ticker={ticker}
+        catalogTer={catalogEntry.ter}
+        catalogDistribution={catalogEntry.distribution}
+        catalogReplication={catalogEntry.replication}
+        catalogIndex={catalogEntry.index}
+      />
     </div>
   );
 }

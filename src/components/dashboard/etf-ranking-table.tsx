@@ -18,7 +18,7 @@ import { EtfFilters } from "./etf-filters";
 import { ScoreWeightsConfigurator } from "./score-weights-configurator";
 import { useScoreWeights } from "@/hooks/use-score-weights";
 import { ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
-import type { EtfRankedEntry } from "@/types/etf";
+import type { EtfRankedEntry, BrokerDealInfo } from "@/types/etf";
 
 function fmt(val: number | null, suffix = "%", decimals = 2): string {
   if (val === null) return "—";
@@ -27,10 +27,16 @@ function fmt(val: number | null, suffix = "%", decimals = 2): string {
 
 function fmtAum(val: number | null): string {
   if (val === null) return "—";
-  if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)} Md`;
-  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(0)} M`;
-  return `${val.toLocaleString("fr-FR")}`;
+  if (val >= 1_000_000_000) return `${(val / 1_000_000_000).toFixed(1)} Md€`;
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(0)} M€`;
+  return `${val.toLocaleString("fr-FR")} €`;
 }
+
+const DEAL_COLORS: Record<BrokerDealInfo["dealType"], string> = {
+  free: "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  capped: "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  reimbursed: "inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+};
 
 type SortKey =
   | "rank"
@@ -74,10 +80,15 @@ export function EtfRankingTable({ etfs }: Props) {
 
   // Recompute composite scores and ranks using custom weights
   const etfsWithCustomScores = useMemo(() => {
+    const leverageMultiplier = (100 - weights.leveragePenalty) / 100;
     const scored = etfs.map((etf) => {
       const { terScore, performanceScore, aumScore, sharpeScore, drawdownScore } =
         etf.scoreBreakdown;
-      const leveragePenalty = etf.leveraged ? 0.85 : 1.0;
+      const penalty = etf.leveraged ? leverageMultiplier : 1.0;
+      const aumFloorPenalty =
+        etf.aum !== null && etf.aum < 20_000_000 ? 0.85
+        : etf.aum !== null && etf.aum < 50_000_000 ? 0.93
+        : 1.0;
       const customScore =
         Math.round(
           (normalizedWeights.ter * terScore +
@@ -85,7 +96,8 @@ export function EtfRankingTable({ etfs }: Props) {
             normalizedWeights.aum * aumScore +
             normalizedWeights.sharpe * sharpeScore +
             normalizedWeights.drawdown * drawdownScore) *
-            leveragePenalty *
+            penalty *
+            aumFloorPenalty *
             10
         ) / 10;
       return { ...etf, score: customScore };
@@ -94,7 +106,7 @@ export function EtfRankingTable({ etfs }: Props) {
     // Re-rank by custom score descending
     const sortedByScore = [...scored].sort((a, b) => b.score - a.score);
     return sortedByScore.map((etf, i) => ({ ...etf, rank: i + 1 }));
-  }, [etfs, normalizedWeights]);
+  }, [etfs, normalizedWeights, weights.leveragePenalty]);
 
   // Dynamic score tooltip reflecting current weights
   const scoreTooltip = useMemo(() => {
@@ -102,7 +114,10 @@ export function EtfRankingTable({ etfs }: Props) {
       weights.ter + weights.performance + weights.aum + weights.sharpe + weights.drawdown;
     if (total === 0) return "Note composite (0–100).";
     const pct = (v: number) => Math.round((v / total) * 100);
-    return `Note composite (0–100) pondérant : TER ${pct(weights.ter)} %, performance ${pct(weights.performance)} %, encours ${pct(weights.aum)} %, Sharpe ${pct(weights.sharpe)} %, drawdown ${pct(weights.drawdown)} %. Les ETF à levier reçoivent un malus de 15 %.`;
+    const leverageText = weights.leveragePenalty > 0
+      ? ` Les ETF à levier reçoivent un malus de ${weights.leveragePenalty} %.`
+      : "";
+    return `Note composite (0–100) pondérant : TER ${pct(weights.ter)} %, performance ${pct(weights.performance)} %, encours ${pct(weights.aum)} %, Sharpe ${pct(weights.sharpe)} %, drawdown ${pct(weights.drawdown)} %.${leverageText}`;
   }, [weights]);
 
   const filtered = useMemo(() => {
@@ -157,6 +172,7 @@ export function EtfRankingTable({ etfs }: Props) {
     if (e.ctrlKey || e.metaKey) return;
     e.preventDefault();
     setNavigatingTo(isin);
+    window.dispatchEvent(new Event("navigation-start"));
     router.push(`/etf/${isin}`);
   }
 
@@ -243,23 +259,33 @@ export function EtfRankingTable({ etfs }: Props) {
           <TableBody>
             {filtered.map((etf) => {
               const isNavigating = navigatingTo === etf.isin;
+              const isOtherNavigating = navigatingTo !== null && navigatingTo !== etf.isin;
+              const isPlaceholder = etf.lastUpdated === "" && etf.score === 0;
               return (
                 <TableRow
                   key={etf.isin}
-                  className={`cursor-pointer transition-opacity hover:bg-muted/50 ${
-                    isNavigating ? "opacity-50" : ""
+                  className={`cursor-pointer transition-all duration-200 hover:bg-muted/50 ${
+                    isNavigating
+                      ? "bg-primary/10 dark:bg-primary/20"
+                      : isOtherNavigating
+                        ? "opacity-40 pointer-events-none"
+                        : isPlaceholder
+                          ? "opacity-40"
+                          : ""
                   }`}
                   onClick={(e) => handleRowClick(etf.isin, e)}
                 >
                   <TableCell className="font-mono text-muted-foreground">
-                    {etf.rank}
-                  </TableCell>
-                  <TableCell>
                     {isNavigating ? (
                       <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    ) : etf.rank === 0 ? (
+                      "—"
                     ) : (
-                      <EtfScoreBadge score={etf.score} />
+                      etf.rank
                     )}
+                  </TableCell>
+                  <TableCell>
+                    <EtfScoreBadge score={etf.score} />
                   </TableCell>
                   <TableCell>
                     <Link
@@ -273,6 +299,19 @@ export function EtfRankingTable({ etfs }: Props) {
                       <div className="text-xs text-muted-foreground">
                         {etf.ticker} &middot; {etf.isin}
                       </div>
+                      {etf.brokerDeals && etf.brokerDeals.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {etf.brokerDeals.map((deal) => (
+                            <span
+                              key={deal.brokerId}
+                              className={DEAL_COLORS[deal.dealType]}
+                              title={deal.description}
+                            >
+                              {deal.brokerName}: {deal.badgeLabel}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </Link>
                   </TableCell>
                   <TableCell>

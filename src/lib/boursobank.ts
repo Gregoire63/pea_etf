@@ -26,6 +26,8 @@ export interface BoursobankData {
   quote?: BoursobankQuote;
   holdings?: BoursobankHolding[];
   trackingError?: number;
+  /** TER en fraction décimale (ex: 0.0020 pour 0.20 %), extrait de la fiche tracker */
+  ter?: number;
   error?: string;
 }
 
@@ -128,7 +130,21 @@ export async function scrapeBoursobank(ticker: string): Promise<BoursobankData> 
           );
         }
 
-        if (result.quote || result.holdings) return result;
+        // TER depuis __NEXT_DATA__ si disponible
+        if (!result.ter) {
+          const rawTer =
+            q?.managementFee ?? q?.expenseRatio ?? q?.ter ??
+            pageProps?.fundData?.ter ?? pageProps?.fundData?.managementFee;
+          if (typeof rawTer === "number" && rawTer > 0) {
+            // Boursorama retourne le TER en pourcentage (0.20 = 0.20 %)
+            const fraction = rawTer > 0.5 ? rawTer / 100 : rawTer;
+            if (fraction >= 0.0001 && fraction <= 0.05) {
+              result.ter = fraction;
+            }
+          }
+        }
+
+        if (result.quote || result.holdings || result.ter) return result;
       } catch {
         // Parsing JSON raté → on continue
       }
@@ -173,7 +189,26 @@ export async function scrapeBoursobank(ticker: string): Promise<BoursobankData> 
       }
     }
 
-    // ─── 4. Composition depuis le HTML ────────────────────────────────────────
+    // ─── 4. TER depuis le HTML ─────────────────────────────────────────────────
+    if (!result.ter) {
+      const terPatterns = [
+        /(?:Frais\s+de\s+gestion|Frais\s+courants|Total\s+Expense\s+Ratio|TER)\s*(?:<[^>]*>)*\s*([\d,.]+)\s*%/i,
+        /(?:frais|gestion|expense)[^<]*(?:<[^>]*>)*\s*([\d,.]+)\s*%/i,
+      ];
+      for (const pat of terPatterns) {
+        const m = html.match(pat);
+        if (m?.[1]) {
+          const pct = parseNum(m[1]);
+          if (pct !== undefined && pct > 0 && pct < 5) {
+            // Convertir en fraction décimale
+            result.ter = pct / 100;
+            break;
+          }
+        }
+      }
+    }
+
+    // ─── 5. Composition depuis le HTML ────────────────────────────────────────
     if (!result.holdings) {
       // Essaie de trouver un tableau de composition
       const holdingPattern =

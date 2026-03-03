@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Minus, RefreshCw } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2 } from "lucide-react";
 
 interface MarketIndex {
   symbol: string;
@@ -10,6 +11,17 @@ interface MarketIndex {
   price: number | null;
   change: number | null;
   changePercent: number | null;
+}
+
+function formatTimestamp(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString("fr-FR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
 }
 
 function MarketCard({ index }: { index: MarketIndex }) {
@@ -50,29 +62,66 @@ function MarketCard({ index }: { index: MarketIndex }) {
 }
 
 export function MarketSummary() {
+  const router = useRouter();
   const [indices, setIndices] = useState<MarketIndex[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dataTimestamp, setDataTimestamp] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  // Récupère le timestamp réel du cache ETF serveur
+  const fetchCacheStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/cache-status");
+      if (res.ok) {
+        const { timestamp } = await res.json();
+        if (timestamp) setDataTimestamp(timestamp);
+      }
+    } catch {
+      // Silencieux
+    }
+  }, []);
+
+  // Récupère les indices de marché
+  const fetchMarket = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/market");
       if (res.ok) {
         const data = await res.json();
         setIndices(data);
-        setUpdatedAt(new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }));
       }
     } catch {
-      // Silently fail
+      // Silencieux
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchMarket();
+    fetchCacheStatus();
+  }, [fetchMarket, fetchCacheStatus]);
+
+  // Refresh complet : vide les caches, re-fetch toutes les données, revalide les pages ISR
+  const handleFullRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      const res = await fetch("/api/refresh", { method: "POST" });
+      if (res.ok) {
+        const { timestamp } = await res.json();
+        setDataTimestamp(timestamp);
+      }
+      // Rafraîchir aussi les indices de marché
+      await fetchMarket();
+      // Recharger les Server Components pour afficher les nouvelles données
+      router.refresh();
+    } catch {
+      // Silencieux
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -91,11 +140,20 @@ export function MarketSummary() {
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground">Marchés en temps réel (Yahoo Finance)</span>
         <button
-          onClick={fetchData}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          onClick={handleFullRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
         >
-          <RefreshCw className="h-3 w-3" />
-          {updatedAt ? `Mis à jour ${updatedAt}` : "Actualiser"}
+          {refreshing ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
+          {refreshing
+            ? "Actualisation…"
+            : dataTimestamp
+              ? `Mis à jour ${formatTimestamp(dataTimestamp)}`
+              : "Actualiser"}
         </button>
       </div>
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">

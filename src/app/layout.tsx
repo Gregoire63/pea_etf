@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Navbar } from "@/components/layout/navbar";
+import { NavigationProgress } from "@/components/layout/navigation-progress";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
@@ -99,6 +100,7 @@ export default function RootLayout({
       >
         <ThemeProvider>
           <TooltipProvider>
+            <NavigationProgress />
             <Navbar />
             <main className="mx-auto max-w-7xl px-4 pt-6 pb-24 sm:pb-8">{children}</main>
           </TooltipProvider>

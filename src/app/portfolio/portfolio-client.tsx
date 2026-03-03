@@ -29,10 +29,22 @@ import {
   type RiskProfile,
 } from "@/lib/portfolio-strategy";
 import { useUserProfile, type UserProfile } from "@/hooks/use-user-profile";
+import { useBroker } from "@/hooks/use-broker";
+import { useEnvelope } from "@/hooks/use-envelope";
 import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
+import { BrokerSelector } from "@/components/portfolio/broker-selector";
+import { EnvelopeToggle } from "@/components/portfolio/envelope-toggle";
+import { PurchasePlanCard } from "@/components/portfolio/purchase-plan-card";
+import { computePurchasePlan, type EtfPriceInfo } from "@/lib/purchase-planner";
+import { getBrokerById, isSelfDirected, estimateAnnualFeeRate, hasManagedOption, estimateManagedFeeRate } from "@/lib/brokers";
+import { PEA_PLAFOND, PEA_TAX_RATE, CTO_TAX_RATE, getTaxRate, type Envelope } from "@/lib/constants";
+import type { BrokerId } from "@/types/broker";
 import type { EtfRankedEntry } from "@/types/etf";
+import { useManagementMode, type ManagementMode } from "@/hooks/use-management-mode";
+import { ManagementModeToggle } from "@/components/portfolio/management-mode-toggle";
+import { ManagedProfileCard } from "@/components/portfolio/managed-profile-card";
 import Link from "next/link";
-import { User, RotateCcw, Pencil, Save, Info, TrendingUp, ShieldCheck, Flame } from "lucide-react";
+import { User, RotateCcw, Pencil, Save, Info, TrendingUp, ShieldCheck, Flame, AlertTriangle } from "lucide-react";
 
 const RATES = [0.06, 0.08, 0.10];
 const RATE_COLORS: Record<string, string> = {
@@ -40,7 +52,6 @@ const RATE_COLORS: Record<string, string> = {
   "8%": "#2563eb",
   "10%": "#16a34a",
 };
-const PEA_PLAFOND = 150_000;
 const CURRENT_YEAR = new Date().getFullYear();
 
 function formatEur(v: number): string {
@@ -89,7 +100,7 @@ function formToProfile(f: FormValues): UserProfile | null {
   const monthlyInvestment = parseFloat(f.monthlyInvestment);
   const retirementAge = parseInt(f.retirementAge);
   if (
-    isNaN(birthYear) || birthYear < 1930 || birthYear > CURRENT_YEAR - 18 ||
+    isNaN(birthYear) || birthYear < CURRENT_YEAR - 100 || birthYear > CURRENT_YEAR - 18 ||
     isNaN(currentPeaCapital) || currentPeaCapital < 0 ||
     isNaN(monthlyInvestment) || monthlyInvestment <= 0 ||
     isNaN(retirementAge) || retirementAge < 50 || retirementAge > 75
@@ -102,12 +113,15 @@ function ProfileForm({
   onSave,
   onCancel,
   showCancel,
+  envelope = "pea",
 }: {
   initial: FormValues;
   onSave: (p: UserProfile) => void;
   onCancel?: () => void;
   showCancel: boolean;
+  envelope?: Envelope;
 }) {
+  const isPea = envelope === "pea";
   const [values, setValues] = useState<FormValues>(initial);
   const [error, setError] = useState<string | null>(null);
 
@@ -142,7 +156,7 @@ function ProfileForm({
             type="number"
             placeholder="ex. 1990"
             value={values.birthYear}
-            min={1930}
+            min={CURRENT_YEAR - 100}
             max={CURRENT_YEAR - 18}
             onChange={(e) => set("birthYear", e.target.value)}
             className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-primary"
@@ -154,7 +168,7 @@ function ProfileForm({
 
         <div className="space-y-1">
           <label className="block text-xs font-medium text-muted-foreground">
-            Épargne PEA actuelle
+            {isPea ? "Épargne PEA actuelle" : "Capital CTO actuel"}
           </label>
           <div className="flex items-center gap-1.5 rounded-md border bg-background px-3 py-2 focus-within:ring-1 focus-within:ring-primary">
             <input
@@ -162,13 +176,13 @@ function ProfileForm({
               placeholder="ex. 5000"
               value={values.currentPeaCapital}
               min={0}
-              max={PEA_PLAFOND}
+              max={isPea ? PEA_PLAFOND : undefined}
               onChange={(e) => set("currentPeaCapital", e.target.value)}
               className="w-full bg-transparent text-sm outline-none"
             />
             <span className="text-xs text-muted-foreground shrink-0">€</span>
           </div>
-          <p className="text-xs text-muted-foreground">Plafond : 150 000 €</p>
+          {isPea && <p className="text-xs text-muted-foreground">Plafond versements : 150 000 €</p>}
         </div>
 
         <div className="space-y-1">
@@ -307,7 +321,11 @@ function EtfStrategySection({
                 )}
                 <c.Icon className="h-4 w-4 sm:h-5 sm:w-5" />
                 <span className="text-[11px] font-semibold sm:text-sm">{c.label}</span>
-                <span className="text-[9px] opacity-80 sm:text-xs">{c.returnMin}–{c.returnMax}%/an</span>
+                <span className="text-[9px] opacity-80 sm:text-xs">
+                  {isSelected
+                    ? `${Math.round(strategy.expectedReturnMin * 100)}–${Math.round(strategy.expectedReturnMax * 100)}%/an`
+                    : `${c.returnMin}–${c.returnMax}%/an`}
+                </span>
                 <span className="hidden text-[10px] opacity-60 sm:block">{c.desc}</span>
               </button>
             );
@@ -415,19 +433,24 @@ function EtfStrategySection({
   );
 }
 
-// Charge les données ETF via use() — suspend jusqu'à résolution
+// Charge les données ETF via use() — suspend jusqu'à résolution.
+// Calcule la stratégie ICI avec les données live pour une sélection dynamique.
 function EtfStrategyLoader({
   etfsPromise,
-  strategy,
+  profile,
   selectedProfile,
   onProfileChange,
 }: {
   etfsPromise: Promise<EtfRankedEntry[]>;
-  strategy: PortfolioStrategy;
+  profile: UserProfile;
   selectedProfile: RiskProfile;
   onProfileChange: (p: RiskProfile) => void;
 }) {
   const etfs = use(etfsPromise);
+  const strategy = useMemo(
+    () => computePortfolioStrategy(profile, selectedProfile, etfs),
+    [profile, selectedProfile, etfs]
+  );
   return (
     <EtfStrategySection
       strategy={strategy}
@@ -439,16 +462,99 @@ function EtfStrategyLoader({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Purchase plan loader — suspend avec les mêmes données ETF
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PurchasePlanLoader({
+  etfsPromise,
+  profile,
+  selectedProfile,
+  brokerId,
+  envelope,
+}: {
+  etfsPromise: Promise<EtfRankedEntry[]>;
+  profile: UserProfile;
+  selectedProfile: RiskProfile;
+  brokerId: BrokerId;
+  envelope: Envelope;
+}) {
+  const broker = getBrokerById(brokerId);
+
+  // Gestion pilotée : pas de plan d'achat individuel
+  if (!isSelfDirected(broker)) {
+    return (
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+            <div className="space-y-1 text-sm">
+              <p className="font-medium">{broker.name} — Gestion pilotée</p>
+              <p className="text-muted-foreground">
+                Avec {broker.name}, votre portefeuille est géré automatiquement par des experts.
+                Vous n&apos;avez pas besoin de passer d&apos;ordres vous-même.
+                {broker.fees.managementFee && (
+                  <> Frais de gestion : {broker.fees.managementFee.detail}.</>
+                )}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const etfs = use(etfsPromise);
+  const strategy = useMemo(
+    () => computePortfolioStrategy(profile, selectedProfile, etfs),
+    [profile, selectedProfile, etfs]
+  );
+
+  const plan = useMemo(() => {
+    const prices: EtfPriceInfo[] = strategy.etfs
+      .map((se) => {
+        const live = etfs.find((e) => e.isin === se.isin);
+        if (!live || !live.currentPrice) return null;
+        return {
+          isin: se.isin,
+          ticker: se.ticker,
+          shortName: se.shortName,
+          currentPrice: live.currentPrice,
+          ytdReturn: live.ytdReturn ?? null,
+          return1y: live.return1y ?? null,
+        };
+      })
+      .filter((p): p is EtfPriceInfo => p !== null);
+
+    return computePurchasePlan({
+      monthlyBudget: profile.monthlyInvestment,
+      strategyEtfs: strategy.etfs,
+      prices,
+      broker,
+    });
+  }, [strategy, etfs, broker, profile.monthlyInvestment]);
+
+  return <PurchasePlanCard plan={plan} monthlyBudget={profile.monthlyInvestment} envelope={envelope} />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Projection dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProjectionDashboard({
   profile,
   etfsPromise,
+  brokerId,
+  envelope,
+  managementMode,
 }: {
   profile: UserProfile;
   etfsPromise: Promise<EtfRankedEntry[]>;
+  brokerId: BrokerId | null;
+  envelope: Envelope;
+  managementMode: ManagementMode;
 }) {
+  const isPea = envelope === "pea";
+  const taxRate = getTaxRate(envelope);
   const [rate, setRate] = useState(0.08);
   const [mounted, setMounted] = useState(false);
   const currentAge = CURRENT_YEAR - profile.birthYear;
@@ -460,10 +566,12 @@ function ProjectionDashboard({
     setSelectedRiskProfile(computedProfile);
   }, [computedProfile]);
 
-  const strategy = useMemo(
-    () => computePortfolioStrategy(profile, selectedRiskProfile),
-    [profile, selectedRiskProfile]
-  );
+  const broker = brokerId ? getBrokerById(brokerId) : null;
+  const isProfileeMode = managementMode === "profilee" && broker && hasManagedOption(broker);
+  const brokerFeeRate = isProfileeMode ? estimateManagedFeeRate(broker) : (broker ? estimateAnnualFeeRate(broker) : 0);
+
+  // Profil sélectionné pour la gestion profilée
+  const [selectedManagedProfile, setSelectedManagedProfile] = useState<string | null>(null);
 
   const baseConfig = {
     holdings: [],
@@ -472,12 +580,14 @@ function ProjectionDashboard({
     birthYear: profile.birthYear,
     retirementAge: profile.retirementAge,
     initialCapital: profile.currentPeaCapital,
+    annualFeeRate: brokerFeeRate,
+    envelope,
   };
 
   const projection = useMemo(
     () => computeProjection({ ...baseConfig, expectedAnnualReturn: rate }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [profile, rate]
+    [profile, rate, envelope, brokerFeeRate]
   );
 
   const allProjections = useMemo(
@@ -488,7 +598,7 @@ function ProjectionDashboard({
         data: computeProjection({ ...baseConfig, expectedAnnualReturn: r }),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [profile]
+    [profile, envelope, brokerFeeRate]
   );
 
   const chartData = useMemo(() => {
@@ -508,50 +618,172 @@ function ProjectionDashboard({
 
   const millionPoint = projection.find((p) => p.projectedValue >= 1_000_000);
   const retirementPoint = projection[projection.length - 1];
-  const plafondPoint = projection.find((p) => p.totalInvested >= PEA_PLAFOND);
+  const plafondPoint = isPea ? projection.find((p) => p.totalInvested >= PEA_PLAFOND) : null;
 
+  // Revenu mensuel basé sur la valeur APRÈS impôts (plus réaliste)
   const monthlyRetirementIncome = retirementPoint
-    ? Math.round((retirementPoint.projectedValue * 0.04) / 12)
+    ? Math.round((retirementPoint.afterTaxValue * 0.04) / 12)
     : null;
 
   const retirementGains = retirementPoint
     ? retirementPoint.projectedValue - retirementPoint.totalInvested
     : 0;
-  const taxSavings = Math.round(retirementGains * (0.30 - 0.172));
+  const retirementTax = Math.round(Math.max(0, retirementGains) * taxRate);
+
+  // Économie fiscale : différence PEA vs CTO (ou inverse si en CTO)
+  const otherTaxRate = isPea ? CTO_TAX_RATE : PEA_TAX_RATE;
+  const taxDifference = Math.round(Math.max(0, retirementGains) * Math.abs(taxRate - otherTaxRate));
 
   const yearsUntilRetirement = profile.retirementAge - currentAge;
 
   return (
     <div className="space-y-6">
-      {/* ── 1. Stratégie ETF — skeleton pendant le chargement des données ── */}
-      <Suspense
-        fallback={
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="h-5 w-48 animate-pulse rounded bg-muted" />
-              <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
-                {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-[9dvh] animate-pulse rounded-xl bg-muted sm:h-24" />
-                ))}
+      {/* ── 1. Stratégie ETF + Plan d'achat ──────────────────────────────── */}
+      {broker && !isSelfDirected(broker) ? (
+        /* Gestion pilotée : pas de stratégie ni de plan d'achat */
+        <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/30">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-2.5">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+              <div className="space-y-1 text-sm">
+                <p className="font-medium text-blue-800 dark:text-blue-300">
+                  {broker.name} — Gestion pilotée
+                </p>
+                <p className="text-muted-foreground">
+                  Avec la gestion pilotée, vos ETF sont choisis et gérés automatiquement par {broker.name}.
+                  Vous n&apos;avez pas besoin de choisir une stratégie ni de passer d&apos;ordres.
+                  {broker.fees.managementFee && (
+                    <> Frais de gestion : <strong>{broker.fees.managementFee.detail}</strong> — déduits de la projection ci-dessous.</>
+                  )}
+                </p>
               </div>
-              <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-muted" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="h-4 w-full animate-pulse rounded-full bg-muted" />
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-[8dvh] animate-pulse rounded-lg bg-muted sm:h-20" />
-              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : isProfileeMode && broker ? (
+        /* Gestion profilée optionnelle — carte de profils */
+        <ManagedProfileCard
+          broker={broker}
+          selectedProfile={selectedManagedProfile}
+          onSelectProfile={setSelectedManagedProfile}
+        />
+      ) : (
+        <>
+          {/* Stratégie ETF — skeleton pendant le chargement des données */}
+          <Suspense
+            fallback={
+              <Card>
+                <CardHeader className="pb-4">
+                  <div className="h-5 w-48 animate-pulse rounded bg-muted" />
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="h-[9dvh] animate-pulse rounded-xl bg-muted sm:h-24" />
+                    ))}
+                  </div>
+                  <div className="mt-2 h-4 w-3/4 animate-pulse rounded bg-muted" />
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="h-4 w-full animate-pulse rounded-full bg-muted" />
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-[8dvh] animate-pulse rounded-lg bg-muted sm:h-20" />
+                  ))}
+                </CardContent>
+              </Card>
+            }
+          >
+            <EtfStrategyLoader
+              etfsPromise={etfsPromise}
+              profile={profile}
+              selectedProfile={selectedRiskProfile}
+              onProfileChange={setSelectedRiskProfile}
+            />
+          </Suspense>
+
+          {/* Plan d'achat mensuel — si courtier sélectionné */}
+          {brokerId && (
+            <Suspense
+              fallback={
+                <Card>
+                  <CardHeader className="pb-3">
+                    <div className="h-5 w-48 animate-pulse rounded bg-muted" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="h-32 animate-pulse rounded-xl bg-muted" />
+                    <div className="h-16 animate-pulse rounded-lg bg-muted" />
+                  </CardContent>
+                </Card>
+              }
+            >
+              <PurchasePlanLoader
+                etfsPromise={etfsPromise}
+                profile={profile}
+                selectedProfile={selectedRiskProfile}
+                brokerId={brokerId}
+                envelope={envelope}
+              />
+            </Suspense>
+          )}
+        </>
+      )}
+
+      {/* ── Avertissement frais courtier ──────────────────────────────────── */}
+      {broker && brokerFeeRate > 0 && (() => {
+        const noFeeProjection = computeProjection({ ...baseConfig, expectedAnnualReturn: rate, annualFeeRate: 0 });
+        const withFeeProjection = computeProjection({ ...baseConfig, expectedAnnualReturn: rate });
+        const noFeeRetirement = noFeeProjection[noFeeProjection.length - 1]?.projectedValue ?? 0;
+        const withFeeRetirement = withFeeProjection[withFeeProjection.length - 1]?.projectedValue ?? 0;
+        const costOfFees = noFeeRetirement - withFeeRetirement;
+        const isManaged = !isSelfDirected(broker);
+        return (
+          <Card className={isManaged || isProfileeMode ? "border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30" : "border-orange-200 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/30"}>
+            <CardContent className="p-4">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${isManaged || isProfileeMode ? "text-amber-600" : "text-orange-600"}`} />
+                <div className="space-y-1 text-sm">
+                  {isManaged ? (
+                    <>
+                      <p className="font-medium text-amber-800 dark:text-amber-300">
+                        {broker.name} — Gestion pilotée ({(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an)
+                      </p>
+                      <p className="text-muted-foreground">
+                        Avec la gestion pilotée, vos ETF sont choisis et gérés par {broker.name}.
+                        La stratégie recommandée ci-dessus ne s&apos;applique pas.
+                        Les frais annuels de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} % réduisent vos rendements :
+                        à {profile.retirementAge} ans, cela représente <strong className="text-amber-800 dark:text-amber-300">{formatEur(costOfFees)}</strong> de manque à gagner.
+                      </p>
+                    </>
+                  ) : isProfileeMode ? (
+                    <>
+                      <p className="font-medium text-amber-800 dark:text-amber-300">
+                        {broker.name} — Gestion profilée ({(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an)
+                      </p>
+                      <p className="text-muted-foreground">
+                        La gestion profilée par {broker.managedOption?.gestionnaire} applique des frais de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an.
+                        À {profile.retirementAge} ans, cela représente <strong className="text-amber-800 dark:text-amber-300">{formatEur(costOfFees)}</strong> de manque à gagner
+                        par rapport à la gestion libre sans frais annuels.
+                        {broker.managedOption?.canMixWithLibre && (
+                          <> Vous pouvez mixer gestion libre et profilée dans le même PEA.</>
+                        )}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium text-orange-800 dark:text-orange-300">
+                        {broker.name} — Frais annuels de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %
+                      </p>
+                      <p className="text-muted-foreground">
+                        Les droits de garde de {broker.name} ({broker.fees.custody.detail}) réduisent vos rendements de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an.
+                        À {profile.retirementAge} ans, cela représente <strong className="text-orange-800 dark:text-orange-300">{formatEur(costOfFees)}</strong> de manque à gagner
+                        par rapport à un courtier sans frais de garde.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
-        }
-      >
-        <EtfStrategyLoader
-          etfsPromise={etfsPromise}
-          strategy={strategy}
-          selectedProfile={selectedRiskProfile}
-          onProfileChange={setSelectedRiskProfile}
-        />
-      </Suspense>
+        );
+      })()}
 
       {/* ── 2. Résumé chiffré — immédiat ─────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
@@ -569,17 +801,31 @@ function ProjectionDashboard({
         </Card>
         <Card>
           <CardContent className="p-3 sm:p-4">
-            <div className="text-[11px] text-muted-foreground sm:text-xs">Plafond PEA (150 k€)</div>
-            <div className="mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl">
-              {profile.currentPeaCapital >= PEA_PLAFOND
-                ? "Déjà atteint"
-                : plafondPoint
-                ? `${plafondPoint.age} ans (${plafondPoint.year})`
-                : "Non atteint"}
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-              Versements cumulés limités à 150 000 €
-            </div>
+            {isPea ? (
+              <>
+                <div className="text-[11px] text-muted-foreground sm:text-xs">Plafond PEA (150 k€)</div>
+                <div className="mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl">
+                  {profile.currentPeaCapital >= PEA_PLAFOND
+                    ? "Déjà atteint"
+                    : plafondPoint
+                    ? `${plafondPoint.age} ans (${plafondPoint.year})`
+                    : "Non atteint"}
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
+                  Versements cumulés limités à 150 000 €
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-[11px] text-muted-foreground sm:text-xs">Total investi à la retraite</div>
+                <div className="mt-0.5 text-lg font-bold sm:mt-1 sm:text-2xl">
+                  {retirementPoint ? formatEur(retirementPoint.totalInvested) : "—"}
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
+                  CTO : pas de plafond de versement
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -595,13 +841,13 @@ function ProjectionDashboard({
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="text-[11px] text-muted-foreground sm:text-xs">
-              Patrimoine à {profile.retirementAge} ans
+              Patrimoine net à {profile.retirementAge} ans
             </div>
             <div className="mt-0.5 text-lg font-bold text-emerald-600 sm:mt-1 sm:text-2xl">
-              {retirementPoint ? formatEur(retirementPoint.projectedValue) : "—"}
+              {retirementPoint ? formatEur(retirementPoint.afterTaxValue) : "—"}
             </div>
             <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-              Scénario {Math.round(rate * 100)}%/an
+              Après {isPea ? "PS 18,6 %" : "flat tax 31,4 %"} · scénario {Math.round(rate * 100)}%/an
             </div>
           </CardContent>
         </Card>
@@ -618,29 +864,33 @@ function ProjectionDashboard({
                 : "—"}
             </div>
             <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-              Règle des 4% · retrait annuel durable
+              Règle des 4% · net après {isPea ? "PS" : "flat tax"}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3 sm:p-4">
-            <div className="text-[11px] text-muted-foreground sm:text-xs">Économie fiscale PEA vs CTO</div>
-            <div className="mt-0.5 text-base font-bold text-blue-600 sm:mt-1 sm:text-xl">
-              {taxSavings > 0 ? `+${formatEur(taxSavings)}` : "—"}
+            <div className="text-[11px] text-muted-foreground sm:text-xs">
+              {isPea ? "Économie fiscale PEA vs CTO" : "Surcoût fiscal CTO vs PEA"}
+            </div>
+            <div className={`mt-0.5 text-base font-bold sm:mt-1 sm:text-xl ${isPea ? "text-blue-600" : "text-red-600"}`}>
+              {taxDifference > 0
+                ? isPea ? `+${formatEur(taxDifference)}` : `-${formatEur(taxDifference)}`
+                : "—"}
             </div>
             <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-              PEA : 17,2% PS · CTO : 30% PFU sur plus-values
+              PEA : 18,6 % PS · CTO : 31,4 % flat tax
             </div>
           </CardContent>
         </Card>
         <Card className="col-span-2 lg:col-span-1">
           <CardContent className="p-3 sm:p-4">
-            <div className="text-[11px] text-muted-foreground sm:text-xs">Plus-value estimée</div>
+            <div className="text-[11px] text-muted-foreground sm:text-xs">Impôt estimé à la retraite</div>
             <div className="mt-0.5 text-base font-bold sm:mt-1 sm:text-xl">
-              {retirementPoint ? formatEur(retirementGains) : "—"}
+              {retirementTax > 0 ? formatEur(retirementTax) : "—"}
             </div>
             <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-              Valeur portefeuille − total versé
+              {isPea ? "18,6 % PS" : "31,4 % flat tax"} sur {retirementGains > 0 ? formatEur(retirementGains) : "—"} de plus-values
             </div>
           </CardContent>
         </Card>
@@ -650,7 +900,7 @@ function ProjectionDashboard({
       <Card className="py-3 gap-2 sm:py-6 sm:gap-6">
         <CardHeader className="px-3 sm:px-6">
           <div className="flex items-center justify-between">
-            <CardTitle>Projection PEA</CardTitle>
+            <CardTitle>Projection {isPea ? "PEA" : "CTO"}</CardTitle>
             <div className="flex gap-1">
               {RATES.map((r) => (
                 <button
@@ -752,8 +1002,8 @@ function ProjectionDashboard({
                 <TableHead>Âge</TableHead>
                 <TableHead>Année</TableHead>
                 <TableHead className="text-right">Total versé</TableHead>
-                <TableHead className="text-right">Valeur projetée</TableHead>
-                <TableHead className="text-right">Plus-value</TableHead>
+                <TableHead className="text-right">Valeur brute</TableHead>
+                <TableHead className="text-right">Après impôts</TableHead>
                 <TableHead className="text-right">Revenu/mois (4%)</TableHead>
                 <TableHead>Jalon</TableHead>
               </TableRow>
@@ -762,8 +1012,7 @@ function ProjectionDashboard({
               {projection
                 .filter((_, i) => i % 5 === 0 || i === projection.length - 1)
                 .map((p) => {
-                  const gains = p.projectedValue - p.totalInvested;
-                  const monthlyIncome = Math.round((p.projectedValue * 0.04) / 12);
+                  const monthlyIncome = Math.round((p.afterTaxValue * 0.04) / 12);
                   return (
                     <TableRow
                       key={p.year}
@@ -774,11 +1023,11 @@ function ProjectionDashboard({
                       <TableCell className="text-right font-mono">
                         {p.totalInvested.toLocaleString("fr-FR")} €
                       </TableCell>
-                      <TableCell className="text-right font-mono text-emerald-600">
+                      <TableCell className="text-right font-mono text-muted-foreground">
                         {p.projectedValue.toLocaleString("fr-FR")} €
                       </TableCell>
-                      <TableCell className="text-right font-mono text-blue-600">
-                        +{gains.toLocaleString("fr-FR")} €
+                      <TableCell className="text-right font-mono text-emerald-600">
+                        {p.afterTaxValue.toLocaleString("fr-FR")} €
                       </TableCell>
                       <TableCell className="text-right font-mono text-muted-foreground">
                         {monthlyIncome.toLocaleString("fr-FR")} €
@@ -805,16 +1054,31 @@ function ProjectionDashboard({
           <div className="flex items-start gap-2">
             <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <div className="space-y-1 text-xs text-muted-foreground">
+              {isPea ? (
+                <>
+                  <p>
+                    <strong>Plafond PEA :</strong> 150 000 € de versements maximum. Les plus-values
+                    et dividendes peuvent faire dépasser ce montant sans problème.
+                  </p>
+                  <p>
+                    <strong>Fiscalité PEA (après 5 ans) :</strong> Pas d&apos;impôt sur le revenu ;
+                    seulement 18,6 % de prélèvements sociaux sur les gains lors du retrait (taux 2026, hausse CSG).
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    <strong>Compte-Titres Ordinaire (CTO) :</strong> Pas de plafond de versement.
+                    Les plus-values et dividendes sont imposés à 31,4 % (12,8 % IR + 18,6 % PS) — flat tax 2026.
+                  </p>
+                  <p>
+                    <strong>Comparaison :</strong> le PEA bénéficie d&apos;une fiscalité plus avantageuse
+                    (18,6 % PS uniquement après 5 ans) mais limite les versements à 150 000 €.
+                  </p>
+                </>
+              )}
               <p>
-                <strong>Plafond PEA :</strong> 150 000 € de versements maximum. Les plus-values
-                et dividendes peuvent faire dépasser ce montant sans problème.
-              </p>
-              <p>
-                <strong>Fiscalité PEA (après 5 ans) :</strong> Pas d&apos;impôt sur le revenu ;
-                seulement 17,2% de prélèvements sociaux sur les gains lors du retrait.
-              </p>
-              <p>
-                <strong>Règle des 4% :</strong> Retrait de 4% de la valeur du portefeuille par an,
+                <strong>Règle des 4 % :</strong> Retrait de 4 % de la valeur du portefeuille par an,
                 permettant de vivre de son capital sans l&apos;épuiser sur ~30 ans.
               </p>
             </div>
@@ -831,9 +1095,17 @@ function ProjectionDashboard({
 
 export function PortfolioClient({ etfsPromise }: { etfsPromise: Promise<EtfRankedEntry[]> }) {
   const { profile, saveProfile, resetProfile, initialized } = useUserProfile();
+  const { envelope, saveEnvelope, initialized: envelopeInit } = useEnvelope();
+  const { mode: managementMode, saveMode: saveManagementMode, initialized: modeInit } = useManagementMode();
+  const { brokerId, saveBroker, initialized: brokerInit } = useBroker();
   const [editing, setEditing] = useState(false);
 
-  if (!initialized) {
+  // Reset management mode to "libre" when switching to a broker without managed option
+  const broker = brokerId ? getBrokerById(brokerId) : null;
+  const showModeToggle = broker && hasManagedOption(broker);
+  const effectiveMode: ManagementMode = showModeToggle ? managementMode : "libre";
+
+  if (!initialized || !brokerInit || !envelopeInit || !modeInit) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -858,6 +1130,7 @@ export function PortfolioClient({ etfsPromise }: { etfsPromise: Promise<EtfRanke
             initial={EMPTY_FORM}
             onSave={(p) => saveProfile(p)}
             showCancel={false}
+            envelope={envelope}
           />
         </CardContent>
       </Card>
@@ -886,6 +1159,7 @@ export function PortfolioClient({ etfsPromise }: { etfsPromise: Promise<EtfRanke
               }}
               onCancel={() => setEditing(false)}
               showCancel={true}
+              envelope={envelope}
             />
           </CardContent>
         </Card>
@@ -922,7 +1196,7 @@ export function PortfolioClient({ etfsPromise }: { etfsPromise: Promise<EtfRanke
                 <div className="text-sm font-bold">{currentAge} ans</div>
               </div>
               <div className="rounded-lg bg-muted/50 px-3 py-2">
-                <div className="text-[10px] text-muted-foreground">PEA actuel</div>
+                <div className="text-[10px] text-muted-foreground">{envelope === "pea" ? "PEA actuel" : "Capital CTO"}</div>
                 <div className="text-sm font-bold">{profile.currentPeaCapital.toLocaleString("fr-FR")} €</div>
               </div>
               <div className="rounded-lg bg-muted/50 px-3 py-2">
@@ -934,12 +1208,21 @@ export function PortfolioClient({ etfsPromise }: { etfsPromise: Promise<EtfRanke
                 <div className="text-sm font-bold">{profile.retirementAge} ans</div>
               </div>
             </div>
+            {/* ── Sélecteur courtier ─────────────────────────────────────── */}
+            {/* ── Sélecteur courtier + enveloppe ──────────────────────────── */}
+            <div className="mt-3 pt-3 border-t space-y-3">
+              <BrokerSelector value={brokerId} onChange={saveBroker} />
+              <EnvelopeToggle value={envelope} onChange={saveEnvelope} />
+              {showModeToggle && broker && (
+                <ManagementModeToggle value={managementMode} onChange={saveManagementMode} broker={broker} />
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* Projection — toujours visible, même en mode édition */}
-      <ProjectionDashboard profile={profile} etfsPromise={etfsPromise} />
+      <ProjectionDashboard profile={profile} etfsPromise={etfsPromise} brokerId={brokerId} envelope={envelope} managementMode={effectiveMode} />
     </div>
   );
 }

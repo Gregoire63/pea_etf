@@ -1,4 +1,5 @@
 import type { PricePoint } from "@/types/etf";
+import { RISK_FREE_RATE } from "./constants";
 
 function findClosestPrice(prices: PricePoint[], targetDate: Date): number | null {
   const targetTime = targetDate.getTime();
@@ -70,7 +71,7 @@ export function annualizedVolatility(prices: PricePoint[]): number | null {
 export function sharpeRatio(
   annualReturn: number | null,
   annualVolatility: number | null,
-  riskFreeRate: number = 0.03
+  riskFreeRate: number = RISK_FREE_RATE
 ): number | null {
   if (annualReturn === null || annualVolatility === null || annualVolatility === 0) {
     return null;

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ExternalLink, RefreshCw, AlertCircle, Loader2 } from "lucide-react";
+import { ExternalLink, RefreshCw, AlertCircle, Loader2, Gift } from "lucide-react";
 import type { BoursobankData } from "@/lib/boursobank";
 import { getBoursoUrl } from "@/lib/boursobank";
+import type { BrokerDealInfo } from "@/types/etf";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // URL builders for each broker
@@ -43,12 +44,20 @@ function fmt(v: number | undefined, decimals = 2, suffix = "") {
 // Main component
 // ─────────────────────────────────────────────────────────────────────────────
 
+const DEAL_TYPE_COLORS: Record<BrokerDealInfo["dealType"], string> = {
+  free: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
+  capped: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  reimbursed: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+};
+
 interface BrokerLinksPanelProps {
   ticker: string;
   isin: string;
+  issuer?: string;
+  brokerDeals?: BrokerDealInfo[];
 }
 
-export function BrokerLinksPanel({ ticker, isin }: BrokerLinksPanelProps) {
+export function BrokerLinksPanel({ ticker, isin, issuer, brokerDeals }: BrokerLinksPanelProps) {
   const [data, setData] = useState<BoursobankData | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -83,6 +92,40 @@ export function BrokerLinksPanel({ ticker, isin }: BrokerLinksPanelProps) {
       </CardHeader>
 
       <CardContent className="space-y-5">
+        {/* ── Offres partenaires ──────────────────────────────────────── */}
+        {brokerDeals && brokerDeals.length > 0 && (
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+              <Gift className="h-3 w-3" />
+              Offres partenaires{issuer ? ` (${issuer})` : ""}
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {brokerDeals.map((deal) => (
+                <div
+                  key={deal.brokerId}
+                  className="rounded-lg border bg-muted/30 px-4 py-3 space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-semibold">{deal.brokerName}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${DEAL_TYPE_COLORS[deal.dealType]}`}>
+                      {deal.badgeLabel}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{deal.description}</p>
+                  {deal.conditions && (
+                    <p className="text-[10px] text-muted-foreground/70">Conditions : {deal.conditions}</p>
+                  )}
+                  {deal.validUntil && (
+                    <p className="text-[10px] text-muted-foreground/70">
+                      Valable jusqu&apos;au {new Date(deal.validUntil).toLocaleDateString("fr-FR")}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ── Broker links grid ─────────────────────────────────────────── */}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {BROKERS.map((broker) => (

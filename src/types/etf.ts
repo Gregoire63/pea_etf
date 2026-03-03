@@ -54,10 +54,38 @@ export interface ScoreBreakdown {
   drawdownScore: number;
 }
 
+// ── Provenance des données multi-sources ─────────────────────────────────────
+
+export type DataSourceName = "justetf" | "boursobank" | "yahoo" | "catalog";
+
+export interface DataProvenance {
+  ter: DataSourceName;
+  aum: DataSourceName;
+}
+
+// ── Offres partenaires courtiers ─────────────────────────────────────────────
+
+export interface BrokerDealInfo {
+  brokerId: string;
+  brokerName: string;
+  /** Label court pour badges (ex: "0 € frais", "Max 0,99 €") */
+  badgeLabel: string;
+  description: string;
+  dealType: "free" | "capped" | "reimbursed";
+  conditions?: string;
+  /** Date d'expiration ISO (null = permanent) */
+  validUntil: string | null;
+}
+
+// ── Entrée classée ──────────────────────────────────────────────────────────
+
 export interface EtfRankedEntry extends PeaEtfCatalogEntry, EtfLiveData {
   score: number;
   scoreBreakdown: ScoreBreakdown;
   rank: number;
+  dataSources?: DataProvenance;
+  /** Offres partenaires courtiers basées sur l'émetteur */
+  brokerDeals?: BrokerDealInfo[];
 }
 
 export interface PricePoint {

@@ -6,6 +6,16 @@ export const SCORING_WEIGHTS = {
   drawdown: 0.15,
 };
 
+/** Malus appliqué aux ETF à levier, en pourcentage (30 = −30 % sur le score).
+ *  Raison : le volatility drag quotidien est multiplié par le carré du facteur
+ *  de levier (2x → 4x le drag). Sur des marchés volatils, un ETF 2x peut perdre
+ *  de la valeur même si l'indice sous-jacent est stable. */
+export const DEFAULT_LEVERAGE_PENALTY = 30;
+
+/** Taux sans risque annuel utilisé pour le calcul du ratio de Sharpe.
+ *  Basé sur le rendement moyen des obligations d'État européennes (~3 %). */
+export const RISK_FREE_RATE = 0.03;
+
 export const SCORING_BENCHMARKS = {
   ter: { best: 0.001, worst: 0.006 },
   return5y: { best: 0.15, worst: -0.02 },
@@ -40,10 +50,46 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Leveraged:"bg-rose-100    text-rose-800    dark:bg-transparent dark:border-rose-500/60    dark:text-rose-400",
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enveloppes fiscales
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type Envelope = "pea" | "cto";
+
+export const ENVELOPE_LABELS: Record<Envelope, string> = {
+  pea: "PEA",
+  cto: "Compte-Titres (CTO)",
+};
+
+/** Plafond de versements PEA (les plus-values peuvent le dépasser). */
+export const PEA_PLAFOND = 150_000;
+
+/**
+ * Taux d'imposition PEA & CTO — barème fiscal en vigueur.
+ *
+ * À mettre à jour en cas de changement législatif (Loi de Finances).
+ * Dernière mise à jour : LF 2026 (CSG relevée à 18,6 %).
+ */
+export const TAX_EFFECTIVE_YEAR = 2026;
+
+/** Prélèvements sociaux PEA après 5 ans : 18,6 % (CSG 2026). */
+export const PEA_TAX_RATE = 0.186;
+
+/** Flat tax CTO : 12,8 % IR + 18,6 % PS = 31,4 %. */
+export const CTO_TAX_RATE = 0.314;
+
+export function getTaxRate(envelope: Envelope): number {
+  return envelope === "pea" ? PEA_TAX_RATE : CTO_TAX_RATE;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Portfolio par défaut
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const DEFAULT_PORTFOLIO = {
   birthYear: 1997,
   retirementAge: 64,
-  startYear: 2026,
+  startYear: new Date().getFullYear(),
   monthlyTotal: 600,
   initialCapital: 14000,
   holdings: [

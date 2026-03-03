@@ -1,14 +1,27 @@
 /**
  * Catalogue dynamique des ETF PEA.
  *
- * Les données de marché (prix, AUM, performances) sont récupérées depuis Yahoo Finance.
- * Seuls les champs structurels propres à chaque ETF (ISIN, catégorie, indice, TER de référence,
- * type de réplication) sont définis ici — ils changent très rarement.
+ * Le catalogue est construit automatiquement à partir de l'API Euronext (ETFs
+ * cotés sur XPAR) enrichis par JustETF. Un cache globalThis 24h évite de
+ * re-scraper à chaque requête.
  *
- * Pour ajouter un nouvel ETF PEA : ajouter une ligne dans BASE_CATALOG.
+ * SEED_CATALOG (7 ETFs essentiels) sert uniquement de fallback si Euronext
+ * est inaccessible.
  */
 
 import type { EtfCategory } from "@/types/etf";
+import {
+  fetchEuronextEtfs,
+  detectCategory,
+  computePeaConfidence,
+  mapReplication,
+  mapDistribution,
+} from "./euronext";
+import { scrapeJustEtf, type JustEtfData } from "./justetf";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 export type BaseCatalogEntry = {
   isin: string;
@@ -26,71 +39,153 @@ export type BaseCatalogEntry = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Base catalog — chaque entrée correspond à un ETF PEA coté sur Euronext Paris.
-// Les données financières (prix, encours, performances) sont récupérées en temps
-// réel depuis Yahoo Finance par getAllEtfsRanked() dans etf-data.ts.
+// SEED_CATALOG — fallback si Euronext est inaccessible
+// Correspond aux 7 ETFs utilisés dans FALLBACK_ETF de portfolio-strategy.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const BASE_CATALOG: BaseCatalogEntry[] = [
-  // ── Monde ──────────────────────────────────────────────────────────────────
-  { isin: "IE0002XZSHO1", yahooTicker: "WPEA.PA",  category: "World",    index: "MSCI World",                          ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR001400U5Q4", yahooTicker: "DCAM.PA",  category: "World",    index: "MSCI World",                          ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681043599", yahooTicker: "CW8.PA",   category: "World",    index: "MSCI World",                          ter: 0.0038, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1781541179", yahooTicker: "LCWD.PA",  category: "World",    index: "MSCI World",                          ter: 0.0012, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── États-Unis ─────────────────────────────────────────────────────────────
-  { isin: "FR0011871128", yahooTicker: "PSP5.PA",  category: "US",       index: "S&P 500",                             ter: 0.0012, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0011550185", yahooTicker: "ESE.PA",   category: "US",       index: "S&P 500",                             ter: 0.0014, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681038326", yahooTicker: "MUSA.PA",  category: "US",       index: "MSCI USA",                            ter: 0.0028, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0011871110", yahooTicker: "PUST.PA",  category: "US",       index: "Nasdaq-100",                          ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681038672", yahooTicker: "RS2K.PA",  category: "US",       index: "Russell 2000",                        ter: 0.0035, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── Europe ─────────────────────────────────────────────────────────────────
-  { isin: "FR0011550193", yahooTicker: "ETZ.PA",   category: "Europe",   index: "STOXX Europe 600",                    ter: 0.0019, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── Zone Euro ──────────────────────────────────────────────────────────────
-  { isin: "LU1681040223", yahooTicker: "CEU.PA",   category: "Eurozone", index: "EURO STOXX 50",                       ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0007054358", yahooTicker: "MEUD.PA",  category: "Eurozone", index: "EURO STOXX 50",                       ter: 0.0007, distribution: "DIST", replication: "Physical",  leveraged: false },
-
-  // ── France ─────────────────────────────────────────────────────────────────
-  { isin: "FR0013380607", yahooTicker: "CACC.PA",  category: "France",   index: "CAC 40",                              ter: 0.0025, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681047236", yahooTicker: "C50.PA",   category: "France",   index: "CAC 40",                              ter: 0.0025, distribution: "ACC",  replication: "Physical",  leveraged: false },
-  { isin: "FR0011041334", yahooTicker: "CACM.PA",  category: "France",   index: "CAC Mid 60",                          ter: 0.0040, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── Marchés Émergents ──────────────────────────────────────────────────────
-  { isin: "FR0013412020", yahooTicker: "PAEEM.PA", category: "Emerging", index: "MSCI Emerging Markets",               ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681044480", yahooTicker: "CEMU.PA",  category: "Emerging", index: "MSCI Emerging Markets",               ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0011869296", yahooTicker: "PLEM.PA",  category: "Emerging", index: "MSCI EM Latin America",               ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── Asie ───────────────────────────────────────────────────────────────────
-  { isin: "FR0013412012", yahooTicker: "PAASI.PA", category: "Asia",     index: "MSCI Emerging Markets Asia",          ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1681043086", yahooTicker: "CP9.PA",   category: "Asia",     index: "MSCI Pacific ex Japan",               ter: 0.0045, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0011869320", yahooTicker: "PINR.PA",  category: "Asia",     index: "MSCI India",                          ter: 0.0085, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── Japon ──────────────────────────────────────────────────────────────────
-  { isin: "FR0011869312", yahooTicker: "PKRW.PA",  category: "Asia",     index: "MSCI Korea",                         ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0011411980", yahooTicker: "TPXE.PA",  category: "Japan",    index: "TOPIX",                               ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── Sectoriels ─────────────────────────────────────────────────────────────
-  { isin: "FR0013412269", yahooTicker: "PANX.PA",  category: "Sector",   index: "Solactive ISS ESG US Tech 100",       ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834987890", yahooTicker: "TNOW.PA",  category: "Sector",   index: "STOXX Europe 600 Technology",         ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834986900", yahooTicker: "HLT.PA",   category: "Sector",   index: "STOXX Europe 600 Health Care",        ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834988351", yahooTicker: "CD8.PA",   category: "Sector",   index: "STOXX Europe 600 Banks",              ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834988088", yahooTicker: "CU2.PA",   category: "Sector",   index: "STOXX Europe 600 Utilities",          ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834988161", yahooTicker: "C6E.PA",   category: "Sector",   index: "STOXX Europe 600 Energy",             ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU1834988245", yahooTicker: "EPRE.PA",  category: "Sector",   index: "STOXX Europe 600 Real Estate",        ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "FR0011869379", yahooTicker: "PNRJ.PA",  category: "Sector",   index: "World Alternative Energy",            ter: 0.0060, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU2572257124", yahooTicker: "GOAI.PA",  category: "Sector",   index: "MSCI ACWI IMI Robotics & AI ESG",     ter: 0.0040, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-  { isin: "LU2089238302", yahooTicker: "WATC.PA",  category: "Sector",   index: "MSCI ACWI IMI Water ESG",             ter: 0.0035, distribution: "ACC",  replication: "Synthetic", leveraged: false },
-
-  // ── ETF à effet de levier ──────────────────────────────────────────────────
-  { isin: "FR0010755611", yahooTicker: "CL2.PA",   category: "Leveraged", index: "MSCI USA Daily 2x Leveraged",        ter: 0.0050, distribution: "ACC",  replication: "Synthetic", leveraged: true, leverageMultiplier: 2 },
-  { isin: "FR0010342592", yahooTicker: "LQQ.PA",   category: "Leveraged", index: "Nasdaq-100 Daily 2x Leveraged",      ter: 0.0060, distribution: "ACC",  replication: "Synthetic", leveraged: true, leverageMultiplier: 2 },
-  { isin: "LU1681044050", yahooTicker: "CE8.PA",   category: "Leveraged", index: "EURO STOXX 50 Daily 2x Leveraged",   ter: 0.0050, distribution: "ACC",  replication: "Synthetic", leveraged: true, leverageMultiplier: 2 },
+const SEED_CATALOG: BaseCatalogEntry[] = [
+  { isin: "IE0002XZSHO1", yahooTicker: "WPEA.PA",  category: "World",    index: "MSCI World",                   ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "FR0011871128", yahooTicker: "PSP5.PA",  category: "US",       index: "S&P 500",                      ter: 0.0012, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "FR0011550193", yahooTicker: "ETZ.PA",   category: "Europe",   index: "STOXX Europe 600",             ter: 0.0019, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "FR0007054358", yahooTicker: "MEUD.PA",  category: "Eurozone", index: "EURO STOXX 50",                ter: 0.0007, distribution: "DIST", replication: "Physical",  leveraged: false },
+  { isin: "FR0013412020", yahooTicker: "PAEEM.PA", category: "Emerging", index: "MSCI Emerging Markets",        ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "FR0011411980", yahooTicker: "TPXE.PA",  category: "Japan",    index: "TOPIX",                        ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "LU1834986900", yahooTicker: "HLT.PA",   category: "Sector",   index: "STOXX Europe 600 Health Care", ter: 0.0030, distribution: "ACC",  replication: "Synthetic", leveraged: false },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers — dérivent des informations depuis les noms Yahoo Finance
+// Cache globalThis (survit au HMR de Turbopack en dev)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CATALOG_CACHE_MS = 24 * 60 * 60 * 1000; // 24h
+
+const g = globalThis as unknown as {
+  __catalogCache?: { data: BaseCatalogEntry[]; timestamp: number } | null;
+  __catalogPending?: Promise<BaseCatalogEntry[]> | null;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getCatalog() — point d'entrée unique
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function getCatalog(): Promise<BaseCatalogEntry[]> {
+  // Servir depuis le cache si valide
+  const cached = g.__catalogCache;
+  if (cached && Date.now() - cached.timestamp < CATALOG_CACHE_MS) {
+    return cached.data;
+  }
+
+  // Dédup des requêtes concurrentes
+  if (!g.__catalogPending) {
+    g.__catalogPending = buildCatalogFromDiscovery().finally(() => {
+      g.__catalogPending = null;
+    });
+  }
+
+  return g.__catalogPending;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildCatalogFromDiscovery() — construction depuis Euronext + JustETF
+// ─────────────────────────────────────────────────────────────────────────────
+
+const JUSTETF_BATCH = 12;
+const JUSTETF_DELAY = 400;
+
+async function buildCatalogFromDiscovery(): Promise<BaseCatalogEntry[]> {
+  try {
+    console.info("[Catalog] Construction dynamique depuis Euronext…");
+
+    // 1. Récupérer tous les ETFs XPAR
+    const euronextEtfs = await fetchEuronextEtfs();
+
+    if (euronextEtfs.length === 0) {
+      console.warn("[Catalog] Euronext a retourné 0 ETF — fallback SEED_CATALOG");
+      return SEED_CATALOG;
+    }
+
+    // 2. Filtrer les PEA candidates avec catégorie reconnue
+    const candidates = euronextEtfs
+      .map((raw) => {
+        const { category, index } = detectCategory(raw.name);
+        const { confidence } = computePeaConfidence(raw.name, raw.isin);
+        return { ...raw, category, index, confidence };
+      })
+      .filter((e) => e.confidence >= 40 && e.category !== null);
+
+    if (candidates.length === 0) {
+      console.warn("[Catalog] 0 PEA candidates trouvés — fallback SEED_CATALOG");
+      return SEED_CATALOG;
+    }
+
+    console.info(
+      `[Catalog] ${candidates.length} PEA candidates (confiance >= 40) — enrichissement JustETF…`,
+    );
+
+    // 3. Enrichir par batch avec JustETF (TER, distribution, réplication)
+    const catalog: BaseCatalogEntry[] = [];
+
+    for (let i = 0; i < candidates.length; i += JUSTETF_BATCH) {
+      const batch = candidates.slice(i, i + JUSTETF_BATCH);
+      const results = await Promise.all(
+        batch.map((c) =>
+          scrapeJustEtf(c.isin).catch(
+            (): JustEtfData => ({ isin: c.isin, error: "fetch failed" }),
+          ),
+        ),
+      );
+
+      for (let j = 0; j < batch.length; j++) {
+        const c = batch[j];
+        const jtf = results[j];
+        const yahooTicker = c.ticker ? `${c.ticker}.PA` : "";
+
+        if (!yahooTicker) continue;
+
+        const isLeveraged = c.category === "Leveraged";
+
+        catalog.push({
+          isin: c.isin,
+          yahooTicker,
+          category: c.category!,
+          index: c.index ?? c.name,
+          ter: jtf.ter ?? 0.003,
+          distribution: mapDistribution(jtf.distribution),
+          replication: mapReplication(jtf.replication),
+          leveraged: isLeveraged,
+          ...(isLeveraged ? { leverageMultiplier: 2 } : {}),
+        });
+      }
+
+      if (i + JUSTETF_BATCH < candidates.length) {
+        await new Promise((r) => setTimeout(r, JUSTETF_DELAY));
+      }
+    }
+
+    if (catalog.length === 0) {
+      console.warn("[Catalog] Enrichissement JustETF n'a produit aucun résultat — fallback SEED_CATALOG");
+      return SEED_CATALOG;
+    }
+
+    console.info(`[Catalog] Catalogue dynamique construit : ${catalog.length} ETFs PEA`);
+
+    // 4. Mettre en cache
+    g.__catalogCache = { data: catalog, timestamp: Date.now() };
+    return catalog;
+  } catch (error) {
+    console.error("[Catalog] Erreur lors de la construction :", error);
+
+    // Retourner le cache expiré si disponible, sinon SEED_CATALOG
+    if (g.__catalogCache?.data?.length) {
+      console.warn("[Catalog] Utilisation du cache expiré");
+      return g.__catalogCache.data;
+    }
+    return SEED_CATALOG;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function extractIssuer(name: string): string {

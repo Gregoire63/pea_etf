@@ -1,15 +1,16 @@
 import { Suspense } from "react";
 import { getAllEtfsRanked } from "@/lib/etf-data";
 import { CompareClient } from "./compare-client";
+import { BrokerComparisonTable } from "@/components/compare/broker-comparison-table";
 import type { EtfRankedEntry } from "@/types/etf";
 import type { Metadata } from "next";
 
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: "Comparer des ETF PEA",
+  title: "Comparer ETF & Courtiers PEA",
   description:
-    "Comparez côte à côte 2 à 3 ETF éligibles PEA : performance, frais, volatilité, score composite et historique de prix.",
+    "Comparatif des courtiers PEA (frais, fonctionnalités) et comparaison côte à côte de 2 à 3 ETF éligibles PEA.",
 };
 
 async function CompareSection() {
@@ -25,13 +26,16 @@ export default function ComparePage() {
     <div className="space-y-6">
       {/* En-tête immédiat */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Comparer des ETF</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Comparer</h1>
         <p className="text-muted-foreground">
-          Sélectionnez 2 à 3 ETF pour les comparer côte à côte.
+          Courtiers PEA et ETF éligibles, côte à côte.
         </p>
       </div>
 
-      {/* Contenu streamé */}
+      {/* ── Tableau comparatif courtiers ──────────────────────────────────── */}
+      <BrokerComparisonTable />
+
+      {/* ── Comparaison ETF (streamé) ────────────────────────────────────── */}
       <Suspense
         fallback={
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

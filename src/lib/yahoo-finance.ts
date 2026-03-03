@@ -3,8 +3,8 @@ import type { PricePoint } from "@/types/etf";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
-const BATCH_SIZE = 5;
-const DELAY_MS = 1200;
+const BATCH_SIZE = 10;
+const DELAY_MS = 500;
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -14,7 +14,7 @@ export async function fetchEtfQuote(yahooTicker: string) {
   try {
     return await yf.quote(yahooTicker);
   } catch (error) {
-    console.error(`Failed to fetch quote for ${yahooTicker}:`, error);
+    console.warn(`Failed to fetch quote for ${yahooTicker}:`, error);
     return null;
   }
 }
@@ -43,7 +43,7 @@ export async function fetchHistoricalPrices(
         close: q.close,
       }));
   } catch (error) {
-    console.error(`Failed to fetch history for ${yahooTicker}:`, error);
+    console.warn(`Failed to fetch history for ${yahooTicker}:`, error);
     return [];
   }
 }
@@ -60,7 +60,7 @@ export async function fetchAllEtfQuotes(
         const quote = await yf.quote(ticker);
         results.set(ticker, quote);
       } catch (error) {
-        console.error(`Failed to fetch ${ticker}:`, error);
+        console.warn(`Failed to fetch ${ticker}:`, error);
         results.set(ticker, null);
       }
     });

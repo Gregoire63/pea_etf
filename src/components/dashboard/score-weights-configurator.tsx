@@ -7,7 +7,7 @@ import { HintTooltip } from "@/components/ui/hint-tooltip";
 import type { ScoreWeights } from "@/hooks/use-score-weights";
 
 const CRITERIA: {
-  key: keyof ScoreWeights;
+  key: keyof Omit<ScoreWeights, "leveragePenalty">;
   label: string;
   sublabel: string;
   trackColor: string;
@@ -132,16 +132,14 @@ export function ScoreWeightsConfigurator({ weights, onChange, onReset, isCustom 
     [localWeights]
   );
 
-  function effectivePct(key: keyof ScoreWeights) {
+  function effectivePct(key: keyof Omit<ScoreWeights, "leveragePenalty">) {
     if (total === 0) return 0;
     return Math.round((localWeights[key] / total) * 100);
   }
 
   function handleChange(key: keyof ScoreWeights, value: number) {
     const next = { ...localWeights, [key]: value };
-    // 1. Mise à jour locale immédiate → slider fluide, pas de re-rendu du tableau
     setLocalWeights(next);
-    // 2. Propagation débouncée → tableau se met à jour ~150 ms après arrêt du drag
     if (propagateTimer.current) clearTimeout(propagateTimer.current);
     propagateTimer.current = setTimeout(() => onChange(next), 150);
   }
@@ -234,6 +232,69 @@ export function ScoreWeightsConfigurator({ weights, onChange, onReset, isCustom 
             </div>
           );
         })}
+      </div>
+
+      {/* Malus levier */}
+      <div className="shrink-0 border-t px-2 py-1">
+        {(() => {
+          const lp = localWeights.leveragePenalty;
+          const sliderBg = `linear-gradient(to right, #e11d48 ${lp * 2}%, var(--color-muted) ${lp * 2}%)`;
+          return (
+            <div className="rounded-xl px-3 py-2 transition-colors hover:bg-muted/40">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="h-2 w-2 shrink-0 rounded-full bg-rose-500" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1 text-sm font-medium leading-none">
+                      Malus levier
+                      <HintTooltip
+                        content="Pénalité appliquée au score des ETF à effet de levier (×2, ×3…). Un malus de 15 % réduit leur score de 15 %. Mettez à 0 % pour ne pas pénaliser le levier."
+                        maxWidth={280}
+                      />
+                    </div>
+                    <div className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
+                      Pénalité ETF à levier
+                    </div>
+                  </div>
+                </div>
+                <span className="shrink-0 text-right text-base font-bold tabular-nums leading-none">
+                  {lp === 0 ? "off" : <>−{lp}<span className="text-xs font-normal text-muted-foreground">%</span></>}
+                </span>
+              </div>
+              <div className="mt-2 px-0.5">
+                <input
+                  type="range"
+                  min={0}
+                  max={50}
+                  step={5}
+                  value={lp}
+                  onChange={(e) => handleChange("leveragePenalty", Number(e.target.value))}
+                  style={{ background: sliderBg, touchAction: "none" }}
+                  className="
+                    h-1.5 w-full cursor-pointer appearance-none rounded-full
+                    [&::-webkit-slider-thumb]:h-[18px]
+                    [&::-webkit-slider-thumb]:w-[18px]
+                    [&::-webkit-slider-thumb]:appearance-none
+                    [&::-webkit-slider-thumb]:rounded-full
+                    [&::-webkit-slider-thumb]:border-2
+                    [&::-webkit-slider-thumb]:border-background
+                    [&::-webkit-slider-thumb]:bg-foreground
+                    [&::-webkit-slider-thumb]:shadow-md
+                    [&::-webkit-slider-thumb]:transition-transform
+                    [&::-webkit-slider-thumb]:hover:scale-110
+                    [&::-moz-range-thumb]:h-[18px]
+                    [&::-moz-range-thumb]:w-[18px]
+                    [&::-moz-range-thumb]:rounded-full
+                    [&::-moz-range-thumb]:border-2
+                    [&::-moz-range-thumb]:border-background
+                    [&::-moz-range-thumb]:bg-foreground
+                    [&::-moz-range-thumb]:shadow-md
+                  "
+                />
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Distribution bar */}

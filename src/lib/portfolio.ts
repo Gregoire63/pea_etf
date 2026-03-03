@@ -1,9 +1,13 @@
 import type { ProjectionPoint, PortfolioConfig } from "@/types/portfolio";
+import { PEA_PLAFOND, getTaxRate } from "@/lib/constants";
 
 export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
   const points: ProjectionPoint[] = [];
   const totalYears = config.retirementAge - (config.startYear - config.birthYear);
-  const monthlyRate = config.expectedAnnualReturn / 12;
+  const netAnnualReturn = config.expectedAnnualReturn - (config.annualFeeRate ?? 0);
+  const monthlyRate = netAnnualReturn / 12;
+  const isPea = config.envelope === "pea";
+  const taxRate = getTaxRate(config.envelope);
 
   let portfolioValue = 0;
   let totalInvested = 0;
@@ -24,19 +28,24 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
 
     if (year > 0) {
       for (let month = 0; month < 12; month++) {
-        // Stop contributions once PEA ceiling (150 000 €) is reached
-        const remainingCap = Math.max(0, 150_000 - totalInvested);
-        const contribution = Math.min(config.monthlyTotal, remainingCap);
+        // PEA : plafond 150 000 € de versements. CTO : illimité.
+        const contribution = isPea
+          ? Math.min(config.monthlyTotal, Math.max(0, PEA_PLAFOND - totalInvested))
+          : config.monthlyTotal;
         portfolioValue = portfolioValue * (1 + monthlyRate) + contribution;
         totalInvested += contribution;
       }
     }
+
+    const gains = Math.max(0, portfolioValue - totalInvested);
+    const afterTaxValue = Math.round(portfolioValue - gains * taxRate);
 
     const point: ProjectionPoint = {
       year: currentYear,
       age,
       totalInvested: Math.round(totalInvested),
       projectedValue: Math.round(portfolioValue),
+      afterTaxValue,
     };
 
     if (
@@ -46,9 +55,11 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
       point.label = "MILLIONNAIRE";
     }
 
+    // Jalon plafond PEA uniquement en enveloppe PEA
     if (
-      totalInvested >= 150_000 &&
-      (points.length === 0 || points[points.length - 1].totalInvested < 150_000)
+      isPea &&
+      totalInvested >= PEA_PLAFOND &&
+      (points.length === 0 || points[points.length - 1].totalInvested < PEA_PLAFOND)
     ) {
       point.label = (point.label ? point.label + " + " : "") + "PLAFOND PEA";
     }

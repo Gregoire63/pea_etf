@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { SCORING_WEIGHTS } from "@/lib/constants";
+import { SCORING_WEIGHTS, DEFAULT_LEVERAGE_PENALTY } from "@/lib/constants";
 
 export interface ScoreWeights {
   ter: number;
@@ -9,6 +9,8 @@ export interface ScoreWeights {
   aum: number;
   sharpe: number;
   drawdown: number;
+  /** Malus levier en pourcentage (0 = pas de malus, 50 = −50 %) */
+  leveragePenalty: number;
 }
 
 const STORAGE_KEY = "pea_score_weights";
@@ -21,6 +23,7 @@ export const DEFAULT_WEIGHTS: ScoreWeights = {
   aum: Math.round(SCORING_WEIGHTS.aum * 100),                // 15
   sharpe: Math.round(SCORING_WEIGHTS.sharpe * 100),          // 20
   drawdown: Math.round(SCORING_WEIGHTS.drawdown * 100),      // 15
+  leveragePenalty: DEFAULT_LEVERAGE_PENALTY,
 };
 
 function isDefault(weights: ScoreWeights): boolean {
@@ -29,7 +32,8 @@ function isDefault(weights: ScoreWeights): boolean {
     weights.performance === DEFAULT_WEIGHTS.performance &&
     weights.aum === DEFAULT_WEIGHTS.aum &&
     weights.sharpe === DEFAULT_WEIGHTS.sharpe &&
-    weights.drawdown === DEFAULT_WEIGHTS.drawdown
+    weights.drawdown === DEFAULT_WEIGHTS.drawdown &&
+    weights.leveragePenalty === DEFAULT_WEIGHTS.leveragePenalty
   );
 }
 
@@ -46,7 +50,13 @@ function loadFromStorage(): ScoreWeights {
       typeof parsed.sharpe === "number" &&
       typeof parsed.drawdown === "number"
     ) {
-      return parsed as ScoreWeights;
+      return {
+        ...parsed as ScoreWeights,
+        // Migration : anciens réglages sans leveragePenalty → valeur par défaut
+        leveragePenalty: typeof parsed.leveragePenalty === "number"
+          ? parsed.leveragePenalty
+          : DEFAULT_WEIGHTS.leveragePenalty,
+      };
     }
   } catch {
     // ignore parse errors
