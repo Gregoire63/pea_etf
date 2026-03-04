@@ -133,7 +133,7 @@ export function CompareClient({ allEtfs }: Props) {
             ))}
           </div>
           <div className="max-h-60 overflow-y-auto rounded border">
-            {filteredEtfs.slice(0, 20).map((etf) => (
+            {filteredEtfs.map((etf) => (
               <button
                 key={etf.isin}
                 onClick={() => toggle(etf.isin)}
