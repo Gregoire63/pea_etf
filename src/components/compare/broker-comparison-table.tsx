@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -284,7 +284,7 @@ export function BrokerComparisonTable() {
               <TableHead className="hidden lg:table-cell">Transfert in</TableHead>
               <TableHead className="text-center hidden md:table-cell">Gestion profilée</TableHead>
               <TableHead className="hidden xl:table-cell">Promo</TableHead>
-              <TableHead className="w-8" />
+              <TableHead className="w-6" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -347,18 +347,11 @@ function BrokerRow({
       >
         {/* Courtier */}
         <TableCell className="whitespace-normal">
-          <div className="flex items-center gap-2">
-            <div className="flex flex-col gap-0.5">
-              <span className="font-medium">{broker.name}</span>
-              <span className="text-[10px] text-muted-foreground lg:hidden">
-                {BROKER_TYPE_LABELS[broker.type]}
-              </span>
-            </div>
-            {isExpanded ? (
-              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
+          <div className="flex flex-col gap-0.5">
+            <span className="font-medium">{broker.name}</span>
+            <span className="text-[10px] text-muted-foreground lg:hidden">
+              {BROKER_TYPE_LABELS[broker.type]}
+            </span>
           </div>
         </TableCell>
 
@@ -446,18 +439,13 @@ function BrokerRow({
           )}
         </TableCell>
 
-        {/* Lien */}
-        <TableCell>
-          <a
-            href={broker.peaUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
-            title={`Voir ${broker.name}`}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+        {/* Chevron */}
+        <TableCell className="w-6 px-0 text-center">
+          {isExpanded ? (
+            <ChevronUp className="mx-auto h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="mx-auto h-3.5 w-3.5 text-muted-foreground" />
+          )}
         </TableCell>
       </TableRow>
 
@@ -750,12 +738,14 @@ function extractAnnualShort(fee: FeeRange): string {
   return `${fmtEur(fee.min)}–${fmtEur(fee.max)}/an`;
 }
 
-/** Cellule "Garde" : montant annuel court, tooltip avec le détail complet. */
+/** Cellule "Garde" : montant annuel court, tooltip hover (desktop) + tap (mobile). */
 function CustodyCell({ fee }: { fee: FeeRange }) {
   const isFree = fee.min === 0 && fee.max === 0;
   const short = isFree ? "Gratuit" : extractAnnualShort(fee);
   const full = fee.detail;
   const needsTooltip = !isFree;
+  const [open, setOpen] = useState(false);
+  const lastTouchMs = useRef(0);
 
   const el = (
     <span
@@ -764,6 +754,13 @@ function CustodyCell({ fee }: { fee: FeeRange }) {
           ? "text-emerald-600 dark:text-emerald-400"
           : "text-amber-600 dark:text-amber-400"
       } ${needsTooltip ? "underline decoration-dotted underline-offset-2 cursor-help" : ""}`}
+      onPointerDown={(e) => {
+        if (needsTooltip && e.pointerType === "touch") {
+          e.stopPropagation();
+          lastTouchMs.current = open ? 0 : Date.now();
+          setOpen((v) => !v);
+        }
+      }}
     >
       {short}
     </span>
@@ -772,8 +769,16 @@ function CustodyCell({ fee }: { fee: FeeRange }) {
   if (!needsTooltip) return el;
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{el}</TooltipTrigger>
+    <Tooltip
+      open={open}
+      onOpenChange={(v) => {
+        if (!v && Date.now() - lastTouchMs.current < 300) return;
+        setOpen(v);
+      }}
+    >
+      <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+        {el}
+      </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs text-xs">
         {full}
       </TooltipContent>
@@ -786,6 +791,8 @@ function FeeRow({ label, fee }: { label: string; fee: FeeRange }) {
   const short = fmtFeeShort(fee);
   const full = fmtFee(fee);
   const needsTooltip = short !== full;
+  const [open, setOpen] = useState(false);
+  const lastTouchMs = useRef(0);
 
   const valueEl = (
     <span
@@ -794,6 +801,13 @@ function FeeRow({ label, fee }: { label: string; fee: FeeRange }) {
           ? "text-emerald-600 dark:text-emerald-400"
           : ""
       } ${needsTooltip ? "underline decoration-dotted underline-offset-2 cursor-help" : ""}`}
+      onPointerDown={(e) => {
+        if (needsTooltip && e.pointerType === "touch") {
+          e.stopPropagation();
+          lastTouchMs.current = open ? 0 : Date.now();
+          setOpen((v) => !v);
+        }
+      }}
     >
       {isFree ? "Gratuit" : short}
     </span>
@@ -803,8 +817,16 @@ function FeeRow({ label, fee }: { label: string; fee: FeeRange }) {
     <div className="flex justify-between gap-2">
       <span className="shrink-0 text-muted-foreground">{label}</span>
       {needsTooltip ? (
-        <Tooltip>
-          <TooltipTrigger asChild>{valueEl}</TooltipTrigger>
+        <Tooltip
+          open={open}
+          onOpenChange={(v) => {
+            if (!v && Date.now() - lastTouchMs.current < 300) return;
+            setOpen(v);
+          }}
+        >
+          <TooltipTrigger asChild onClick={(e) => e.stopPropagation()}>
+            {valueEl}
+          </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs text-xs">
             {full}
           </TooltipContent>
