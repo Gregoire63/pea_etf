@@ -203,6 +203,84 @@ const BROKER_SPECIFIC_PATTERNS: Record<string, RegExp[]> = {
     /50\s*000\s*€/gi,
     /gestion\s+(?:conseillée|pilotée)/gi,
   ],
+  "hello-bank": [
+    /1[.,]75\s*€/gi,
+    /5\s*€\s*(?:par\s+ordre|fixe)?/gi,
+    /start|active/gi,
+    /hello\s*(?:bank|prime)/gi,
+    /bnp\s*paribas/gi,
+  ],
+  monabanq: [
+    /5[.,]50\s*€/gi,
+    /0[.,]50\s*%/gi,
+    /crédit\s*mutuel/gi,
+  ],
+  "credit-agricole": [
+    /0[.,]65\s*%/gi,
+    /8\s*€\s*(?:min|minimum)/gi,
+    /investore/gi,
+    /caisse\s+régionale/gi,
+    /amundi/gi,
+    /droits?\s+de\s+garde/gi,
+  ],
+  "bnp-paribas": [
+    /5[.,]50\s*€/gi,
+    /11\s*€/gi,
+    /0[.,]40?\s*%/gi,
+    /0[.,]29\s*%/gi,
+    /droits?\s+de\s+garde/gi,
+  ],
+  "societe-generale": [
+    /0[.,]50\s*%/gi,
+    /8[.,]50\s*€/gi,
+    /0[.,]30\s*%/gi,
+    /droits?\s+de\s+garde/gi,
+    /bourse\s+en\s+ligne/gi,
+  ],
+  lcl: [
+    /0[.,]50\s*%/gi,
+    /5\s*€\s*(?:min|minimum)/gi,
+    /0[.,]20\s*%/gi,
+    /droits?\s+de\s+garde/gi,
+  ],
+  "credit-mutuel": [
+    /4[.,]95\s*€/gi,
+    /0[.,]50\s*%/gi,
+    /0[.,]20\s*%/gi,
+    /droits?\s+de\s+garde/gi,
+    /crédit\s+mutuel/gi,
+    /cic/gi,
+  ],
+  "caisse-epargne": [
+    /0[.,]50\s*%/gi,
+    /6\s*€\s*(?:min|minimum)/gi,
+    /0[.,]25\s*%/gi,
+    /direct\s+[ée]cureuil/gi,
+    /bpce/gi,
+    /droits?\s+de\s+garde/gi,
+  ],
+  "banque-populaire": [
+    /0[.,]50\s*%/gi,
+    /7\s*€\s*(?:min|minimum)/gi,
+    /0[.,]25\s*%/gi,
+    /bpce/gi,
+    /droits?\s+de\s+garde/gi,
+  ],
+  goodvest: [
+    /1[.,]60\s*%/gi,
+    /1[.,]90\s*%/gi,
+    /gestion\s+pilotée/gi,
+    /isr|responsable|durable|climat/gi,
+    /accord\s+de\s+paris/gi,
+    /300\s*€/gi,
+  ],
+  nalo: [
+    /1[.,]55\s*%/gi,
+    /1[.,]65\s*%/gi,
+    /gestion\s+(?:sous\s+)?mandat/gi,
+    /multi[- ]?projets?/gi,
+    /1\s*000\s*€\s*(?:min|minimum)/gi,
+  ],
 };
 
 /** Patterns spécifiques pour la détection de gestion profilée par courtier. */
@@ -224,6 +302,11 @@ const BROKER_MANAGED_PATTERNS: Record<string, RegExp[]> = {
     /banque\s+postale/gi,
     /10\s*000\s*€/gi,
     /75\s*000\s*€/gi,
+  ],
+  "credit-agricole": [
+    /gestion\s+(?:sous\s+mandat|profil[ée]e?)/gi,
+    /amundi/gi,
+    /prudent|[ée]quilibr[ée]|dynamique/gi,
   ],
 };
 
@@ -263,6 +346,39 @@ const COMPARISON_URLS: Record<string, string[]> = {
   ],
   ramify: [
     "https://avenuedesinvestisseurs.fr/avis-ramify-gestion-pilotee/",
+  ],
+  "hello-bank": [
+    "https://avenuedesinvestisseurs.fr/avis-hello-bank-bourse-pea/",
+  ],
+  monabanq: [
+    "https://www.francetransactions.com/bourse/pea/pea-monabanq.html",
+  ],
+  "credit-agricole": [
+    "https://www.francetransactions.com/bourse/pea/pea-credit-agricole.html",
+  ],
+  "bnp-paribas": [
+    "https://www.francetransactions.com/bourse/pea/pea-bnp-paribas.html",
+  ],
+  "societe-generale": [
+    "https://www.francetransactions.com/bourse/pea/pea-societe-generale.html",
+  ],
+  lcl: [
+    "https://www.francetransactions.com/bourse/pea/pea-lcl.html",
+  ],
+  "credit-mutuel": [
+    "https://www.francetransactions.com/bourse/pea/pea-credit-mutuel.html",
+  ],
+  "caisse-epargne": [
+    "https://www.francetransactions.com/bourse/pea/pea-caisse-epargne.html",
+  ],
+  "banque-populaire": [
+    "https://www.francetransactions.com/bourse/pea/pea-banque-populaire.html",
+  ],
+  goodvest: [
+    "https://avenuedesinvestisseurs.fr/avis-goodvest-investissement-responsable/",
+  ],
+  nalo: [
+    "https://avenuedesinvestisseurs.fr/avis-nalo-gestion-pilotee/",
   ],
 };
 

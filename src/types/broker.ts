@@ -10,7 +10,18 @@ export type BrokerId =
   | "saxo-banque"
   | "yomoni"
   | "ramify"
-  | "easybourse";
+  | "easybourse"
+  | "hello-bank"
+  | "monabanq"
+  | "credit-agricole"
+  | "bnp-paribas"
+  | "societe-generale"
+  | "lcl"
+  | "credit-mutuel"
+  | "caisse-epargne"
+  | "banque-populaire"
+  | "goodvest"
+  | "nalo";
 
 // ── Plan d'achat mensuel ────────────────────────────────────────────────────
 

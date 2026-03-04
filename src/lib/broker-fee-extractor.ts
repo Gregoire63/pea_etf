@@ -367,9 +367,147 @@ function extractEasyBourse(text: string, comp: string): ExtractedFees {
 }
 
 function extractManagedBroker(_text: string, _comp: string): ExtractedFees {
-  // Yomoni & Ramify : gestion pilotée, pas de feeModel à extraire
+  // Yomoni, Ramify, Goodvest, Nalo : gestion pilotée, pas de feeModel à extraire
   // Les frais de gestion sont annuels, pas par ordre
   return {};
+}
+
+// ── Extracteur générique pour banques traditionnelles ───────────────────────
+
+function extractTraditionalBank(
+  text: string,
+  comp: string,
+  opts: {
+    expectedRate?: number;
+    expectedMin?: number;
+    tiered?: boolean;
+    tiers?: Array<{ upTo: number; fee: number }>;
+    aboveRate?: number;
+    bankNamePattern: RegExp;
+  },
+): ExtractedFees {
+  const result: ExtractedFees = {};
+
+  // Chercher taux de commission
+  const rateMatch = capture(text, /(0[.,]\d+)\s*%\s*(?:par\s+ordre|de\s+courtage|commission)?/i);
+  const rate = rateMatch ? parseFrenchNumber(rateMatch) / 100 : null;
+
+  // Chercher minimum en €
+  const minMatch = capture(text, /min(?:imum)?\s*(\d+[.,]?\d*)\s*€/i);
+  const minFee = minMatch ? parseFrenchNumber(minMatch) : null;
+
+  // Confirmation par site de comparaison
+  const compConfirms = has(comp, opts.bankNamePattern);
+
+  if (opts.tiered && opts.tiers) {
+    // Modèle paliers (Hello Bank!, BNP, Crédit Mutuel)
+    const tierMatch = capture(text, /(\d+[.,]\d+)\s*€(?:[^.]{0,30}(?:500|1\s*000))/i);
+    const tierFee = tierMatch ? parseFrenchNumber(tierMatch) : null;
+
+    result.feeModel = {
+      value: {
+        type: "tiered",
+        tiers: tierFee ? [{ upTo: opts.tiers[0].upTo, fee: tierFee }] : opts.tiers,
+        aboveRate: rate ?? opts.aboveRate ?? 0.005,
+      },
+      confidence: compConfirms ? "high" : (tierFee || rate) ? "medium" : "low",
+      source: "traditional bank tiered pattern",
+    };
+  } else {
+    // Modèle pourcentage avec minimum (SG, LCL, CA, CE, BP)
+    result.feeModel = {
+      value: {
+        type: "percentage",
+        rate: rate ?? opts.expectedRate ?? 0.005,
+        min: minFee ?? opts.expectedMin ?? 5,
+      },
+      confidence: compConfirms ? "high" : (rate || minFee) ? "medium" : "low",
+      source: "traditional bank percentage pattern",
+    };
+  }
+
+  const etfCount = extractEtfCount(text);
+  if (etfCount) {
+    result.etfCount = { value: etfCount, confidence: "medium", source: "ETF count pattern" };
+  }
+
+  return result;
+}
+
+function extractHelloBank(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    tiered: true,
+    tiers: [{ upTo: 500, fee: 1.75 }, { upTo: 2000, fee: 5 }],
+    aboveRate: 0.005,
+    bankNamePattern: /hello\s*bank/i,
+  });
+}
+
+function extractMonabanq(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    tiered: true,
+    tiers: [{ upTo: 1000, fee: 5.50 }],
+    aboveRate: 0.005,
+    bankNamePattern: /monabanq/i,
+  });
+}
+
+function extractCreditAgricole(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    expectedRate: 0.0065,
+    expectedMin: 8,
+    bankNamePattern: /cr[ée]dit\s*agricole/i,
+  });
+}
+
+function extractBnpParibas(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    tiered: true,
+    tiers: [{ upTo: 1000, fee: 5.50 }, { upTo: 3000, fee: 11 }],
+    aboveRate: 0.004,
+    bankNamePattern: /bnp\s*paribas/i,
+  });
+}
+
+function extractSocieteGenerale(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    expectedRate: 0.005,
+    expectedMin: 8.50,
+    bankNamePattern: /soci[ée]t[ée]\s*g[ée]n[ée]rale|^sg$/i,
+  });
+}
+
+function extractLcl(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    expectedRate: 0.005,
+    expectedMin: 5,
+    bankNamePattern: /lcl/i,
+  });
+}
+
+function extractCreditMutuel(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    tiered: true,
+    tiers: [{ upTo: 1000, fee: 4.95 }],
+    aboveRate: 0.005,
+    bankNamePattern: /cr[ée]dit\s*mutuel|cic/i,
+  });
+}
+
+function extractCaisseEpargne(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    expectedRate: 0.005,
+    expectedMin: 6,
+    bankNamePattern: /caisse\s*d'?[ée]pargne|bpce/i,
+  });
+}
+
+function extractBanquePopulaire(text: string, comp: string): ExtractedFees {
+  return extractTraditionalBank(text, comp, {
+    expectedRate: 0.005,
+    expectedMin: 7,
+    bankNamePattern: /banque\s*populaire|bpce/i,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -387,6 +525,17 @@ const EXTRACTORS: Record<string, Extractor> = {
   easybourse: extractEasyBourse,
   yomoni: extractManagedBroker,
   ramify: extractManagedBroker,
+  "hello-bank": extractHelloBank,
+  monabanq: extractMonabanq,
+  "credit-agricole": extractCreditAgricole,
+  "bnp-paribas": extractBnpParibas,
+  "societe-generale": extractSocieteGenerale,
+  lcl: extractLcl,
+  "credit-mutuel": extractCreditMutuel,
+  "caisse-epargne": extractCaisseEpargne,
+  "banque-populaire": extractBanquePopulaire,
+  goodvest: extractManagedBroker,
+  nalo: extractManagedBroker,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
