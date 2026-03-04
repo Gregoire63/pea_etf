@@ -395,19 +395,7 @@ function BrokerRow({
 
         {/* Garde */}
         <TableCell className="hidden sm:table-cell">
-          <span
-            className={`text-xs ${
-              broker.fees.custody.min === 0 &&
-              broker.fees.custody.max === 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-amber-600 dark:text-amber-400"
-            }`}
-          >
-            {broker.fees.custody.min === 0 &&
-            broker.fees.custody.max === 0
-              ? "Gratuit"
-              : broker.fees.custody.detail}
-          </span>
+          <CustodyCell fee={broker.fees.custody} />
         </TableCell>
 
         {/* DCA gratuit */}
@@ -744,6 +732,54 @@ function BrokerDetailPanel({ broker }: { broker: PeaBroker }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers detail panel
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Extrait un montant annuel court depuis le détail de garde. */
+function extractAnnualShort(fee: FeeRange): string {
+  // Chercher un taux annuel explicite dans le detail (ex: "0,29 %/an")
+  const annualPct = fee.detail.match(/([\d,]+)\s*%\/an/);
+  if (annualPct) return `${annualPct[1]} %/an`;
+  // Chercher "X %/an" dans une autre forme
+  const pctAn = fee.detail.match(/([\d,]+)\s*%\s*(?:par\s+)?an/i);
+  if (pctAn) return `${pctAn[1]} %/an`;
+  // Sinon construire depuis min/max
+  if (fee.unit === "%") {
+    const rate = fee.min === fee.max ? `${fee.min}` : `${fee.min}–${fee.max}`;
+    return `${rate.replace(".", ",")} %/an`;
+  }
+  if (fee.min === fee.max) return `${fmtEur(fee.min)}/an`;
+  return `${fmtEur(fee.min)}–${fmtEur(fee.max)}/an`;
+}
+
+/** Cellule "Garde" : montant annuel court, tooltip avec le détail complet. */
+function CustodyCell({ fee }: { fee: FeeRange }) {
+  const isFree = fee.min === 0 && fee.max === 0;
+  const short = isFree ? "Gratuit" : extractAnnualShort(fee);
+  const full = fee.detail;
+  const needsTooltip = !isFree;
+
+  const el = (
+    <span
+      className={`text-xs font-medium ${
+        isFree
+          ? "text-emerald-600 dark:text-emerald-400"
+          : "text-amber-600 dark:text-amber-400"
+      } ${needsTooltip ? "underline decoration-dotted underline-offset-2 cursor-help" : ""}`}
+    >
+      {short}
+    </span>
+  );
+
+  if (!needsTooltip) return el;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{el}</TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs">
+        {full}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 function FeeRow({ label, fee }: { label: string; fee: FeeRange }) {
   const isFree = fee.min === 0 && fee.max === 0;

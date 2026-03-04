@@ -4,7 +4,7 @@ export default function Loading() {
   return (
     <div className="relative">
       {/* Overlay message */}
-      <div className="absolute inset-0 z-10 flex items-start justify-center pt-32">
+      <div className="fixed inset-0 z-10 flex items-center justify-center">
         <div className="flex flex-col items-center gap-3 rounded-xl border bg-card/95 px-8 py-6 shadow-lg backdrop-blur-sm">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
           <p className="text-sm font-medium text-foreground">
