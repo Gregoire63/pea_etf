@@ -170,13 +170,33 @@ export async function GET() {
   // Process in background, stream results
   (async () => {
     try {
+      // ── Phase 0 : chargement du catalogue ───────────────────────────────
+      await send({
+        type: "status",
+        step: "catalog",
+        message: "Chargement du catalogue ETF éligibles PEA…",
+        progress: 2,
+      });
+
       const catalog = await getCatalog();
+      const totalBatches = Math.ceil(catalog.length / BATCH_SIZE);
       const allRaw: RawEtfData[] = [];
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const allQuotes = new Map<string, Record<string, any> | null>();
 
+      await send({
+        type: "status",
+        step: "quotes",
+        message: `Récupération des cours en temps réel — 0/${catalog.length} ETF…`,
+        progress: 5,
+        loaded: 0,
+        total: catalog.length,
+      });
+
+      // ── Phase 1 : récupération des cours + historiques ─────────────────
       for (let i = 0; i < catalog.length; i += BATCH_SIZE) {
         const batch = catalog.slice(i, i + BATCH_SIZE);
+        const batchIndex = Math.floor(i / BATCH_SIZE) + 1;
 
         // Fetch quotes + historical prices in parallel for this batch
         const batchResults = await Promise.all(
@@ -205,11 +225,19 @@ export async function GET() {
           }
         }
 
-        const progress = Math.round(
-          ((i + batch.length) / catalog.length) * 85
-        );
+        const loaded = Math.min(i + batch.length, catalog.length);
+        const progress = Math.round((loaded / catalog.length) * 80) + 5;
         if (batchEntries.length > 0) {
-          await send({ type: "batch", etfs: batchEntries, progress });
+          await send({
+            type: "batch",
+            step: "quotes",
+            etfs: batchEntries,
+            progress,
+            loaded,
+            total: catalog.length,
+            batchIndex,
+            totalBatches,
+          });
         }
 
         if (i + BATCH_SIZE < catalog.length) {
@@ -217,10 +245,11 @@ export async function GET() {
         }
       }
 
-      // Phase 2 : résolution JustETF
+      // ── Phase 2 : résolution métadonnées (TER, encours, sources) ──────
       await send({
         type: "status",
-        message: "Résolution des métadonnées…",
+        step: "metadata",
+        message: "Vérification des frais (TER) et encours depuis JustETF…",
         progress: 88,
       });
 
@@ -229,10 +258,11 @@ export async function GET() {
         yahooQuotes: allQuotes,
       });
 
-      // Phase 3 : scoring avec benchmarks dynamiques
+      // ── Phase 3 : scoring avec benchmarks dynamiques ──────────────────
       await send({
         type: "status",
-        message: "Calcul des scores…",
+        step: "scoring",
+        message: "Calcul des scores et classement des ETF…",
         progress: 95,
       });
 
@@ -282,7 +312,7 @@ export async function GET() {
       finalEntries.forEach((e, i) => (e.rank = i + 1));
 
       setCachedEtfs(finalEntries);
-      await send({ type: "complete", etfs: finalEntries, progress: 100 });
+      await send({ type: "complete", step: "complete", etfs: finalEntries, progress: 100 });
     } catch (err) {
       console.error("[etfs/stream] Error:", err);
       await send({ type: "error", message: "Erreur lors du chargement des données ETF." });

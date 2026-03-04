@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { EtfRankingTable } from "./etf-ranking-table";
 import { EtfOverview } from "./etf-overview";
+import { LoadingSteps } from "./loading-steps";
+import type { LoadingStep, LoadingContext } from "./loading-steps";
 import { Loader2, RefreshCw } from "lucide-react";
 import type { EtfRankedEntry, EtfCategory } from "@/types/etf";
 
@@ -111,6 +113,12 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
   const [isComplete, setIsComplete] = useState(
     !!serverEtfs && serverEtfs.length > 0
   );
+  const [loadingCtx, setLoadingCtx] = useState<LoadingContext>({
+    step: "catalog" as LoadingStep,
+    progress: 0,
+    loaded: 0,
+    total: 0,
+  });
 
   // Compter les ETFs chargés vs placeholders
   const loadedCount = useMemo(
@@ -158,14 +166,31 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
             if (data.type === "batch") {
               setEtfs((prev) => mergeEtfs(prev, data.etfs));
               setProgress(data.progress ?? 0);
-              setStatusMessage("Chargement des données live…");
+              setStatusMessage("Récupération des cours…");
+              setLoadingCtx((prev) => ({
+                ...prev,
+                step: (data.step as LoadingStep) ?? prev.step,
+                progress: data.progress ?? prev.progress,
+                loaded: data.loaded ?? prev.loaded,
+                total: data.total ?? prev.total,
+              }));
             } else if (data.type === "status") {
               setStatusMessage(data.message ?? "");
               setProgress(data.progress ?? 0);
+              setLoadingCtx((prev) => ({
+                ...prev,
+                step: (data.step as LoadingStep) ?? prev.step,
+                progress: data.progress ?? prev.progress,
+              }));
             } else if (data.type === "complete") {
               setEtfs(data.etfs);
               setProgress(100);
               setIsComplete(true);
+              setLoadingCtx((prev) => ({
+                ...prev,
+                step: "complete",
+                progress: 100,
+              }));
             } else if (data.type === "error") {
               setError(true);
             }
@@ -189,6 +214,7 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
     setError(false);
     setProgress(0);
     setStatusMessage("Chargement des données live…");
+    setLoadingCtx({ step: "catalog", progress: 0, loaded: 0, total: 0 });
     fetchStreamingData();
   }, [catalog, fetchStreamingData]);
 
@@ -209,6 +235,13 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
         </section>
       )}
 
+      {/* Panneau de chargement détaillé (premier chargement) */}
+      {loading && !isComplete && (
+        <section className="mb-6">
+          <LoadingSteps context={loadingCtx} />
+        </section>
+      )}
+
       {/* Tableau complet */}
       <section>
         <div className="mb-3 flex items-center gap-2">
@@ -219,7 +252,7 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               {loadedCount > 0
-                ? `${loadedCount}/${etfs.length} chargés — ${statusMessage}`
+                ? `${loadedCount}/${etfs.length} chargés`
                 : statusMessage}
             </span>
           )}
@@ -243,16 +276,6 @@ export function EtfRankingLive({ catalog, serverEtfs }: Props) {
             </span>
           )}
         </div>
-
-        {/* Barre de progression */}
-        {loading && (
-          <div className="mb-3 h-1 w-full overflow-hidden rounded-full bg-muted/50">
-            <div
-              className="h-full rounded-full bg-primary/60 transition-all duration-700 ease-out"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
 
         <EtfRankingTable etfs={sortedEtfs} />
       </section>
