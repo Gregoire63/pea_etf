@@ -798,6 +798,15 @@ function ProjectionDashboard({
   const retirementPoint = projection[projection.length - 1];
   const plafondPoint = isPea ? projection.find((p) => p.totalInvested >= PEA_PLAFOND) : null;
 
+  // Manque à gagner : différence entre projection sans frais et avec frais
+  const feeCost = useMemo(() => {
+    if (!broker || (brokerFeeRate === 0 && monthlyTradeFee === 0)) return 0;
+    const noFee = computeProjection({ ...baseConfig, expectedAnnualReturn: rate, annualFeeRate: 0, monthlyTradeFee: 0 });
+    const noFeeRetirement = noFee[noFee.length - 1]?.projectedValue ?? 0;
+    return noFeeRetirement - (retirementPoint?.projectedValue ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, rate, envelope, brokerFeeRate, monthlyTradeFee]);
+
   // Revenu mensuel basé sur la valeur APRÈS impôts (plus réaliste)
   const monthlyRetirementIncome = retirementPoint
     ? Math.round((retirementPoint.afterTaxValue * 0.04) / 12)
@@ -904,65 +913,6 @@ function ProjectionDashboard({
         </>
       )}
 
-      {/* ── Avertissement frais courtier ──────────────────────────────────── */}
-      {broker && brokerFeeRate > 0 && (() => {
-        const noFeeProjection = computeProjection({ ...baseConfig, expectedAnnualReturn: rate, annualFeeRate: 0 });
-        const withFeeProjection = computeProjection({ ...baseConfig, expectedAnnualReturn: rate });
-        const noFeeRetirement = noFeeProjection[noFeeProjection.length - 1]?.projectedValue ?? 0;
-        const withFeeRetirement = withFeeProjection[withFeeProjection.length - 1]?.projectedValue ?? 0;
-        const costOfFees = noFeeRetirement - withFeeRetirement;
-        const isManaged = !isSelfDirected(broker);
-        return (
-          <Card className={isManaged || isProfileeMode ? "border-amber-300 bg-amber-50/50 dark:border-amber-700 dark:bg-amber-950/30" : "border-orange-200 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/30"}>
-            <CardContent className="p-4">
-              <div className="flex items-start gap-2.5">
-                <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${isManaged || isProfileeMode ? "text-amber-600" : "text-orange-600"}`} />
-                <div className="space-y-1 text-sm">
-                  {isManaged ? (
-                    <>
-                      <p className="font-medium text-amber-800 dark:text-amber-300">
-                        {broker.name} — Gestion pilotée ({(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an)
-                      </p>
-                      <p className="text-muted-foreground">
-                        Avec la gestion pilotée, vos ETF sont choisis et gérés par {broker.name}.
-                        La stratégie recommandée ci-dessus ne s&apos;applique pas.
-                        Les frais annuels de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} % réduisent vos rendements :
-                        à {profile.retirementAge} ans, cela représente <strong className="text-amber-800 dark:text-amber-300">{formatEur(costOfFees)}</strong> de manque à gagner.
-                      </p>
-                    </>
-                  ) : isProfileeMode ? (
-                    <>
-                      <p className="font-medium text-amber-800 dark:text-amber-300">
-                        {broker.name} — Gestion profilée ({(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an)
-                      </p>
-                      <p className="text-muted-foreground">
-                        La gestion profilée par {broker.managedOption?.gestionnaire} applique des frais de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an.
-                        À {profile.retirementAge} ans, cela représente <strong className="text-amber-800 dark:text-amber-300">{formatEur(costOfFees)}</strong> de manque à gagner
-                        par rapport à la gestion libre sans frais annuels.
-                        {broker.managedOption?.canMixWithLibre && (
-                          <> Vous pouvez mixer gestion libre et profilée dans le même PEA.</>
-                        )}
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-medium text-orange-800 dark:text-orange-300">
-                        {broker.name} — Frais annuels de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %
-                      </p>
-                      <p className="text-muted-foreground">
-                        Les droits de garde de {broker.name} ({broker.fees.custody.detail}) réduisent vos rendements de {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an.
-                        À {profile.retirementAge} ans, cela représente <strong className="text-orange-800 dark:text-orange-300">{formatEur(costOfFees)}</strong> de manque à gagner
-                        par rapport à un courtier sans frais de garde.
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })()}
-
       {/* ── 2. Résumé chiffré — immédiat ─────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
         <Card>
@@ -1046,26 +996,60 @@ function ProjectionDashboard({
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className={
+          feeCost >= 20_000
+            ? "border-red-300 bg-red-50/50 dark:border-red-800 dark:bg-red-950/30"
+            : feeCost >= 5_000
+              ? "border-orange-300 bg-orange-50/50 dark:border-orange-800 dark:bg-orange-950/30"
+              : feeCost > 0
+                ? "border-amber-200 bg-amber-50/30 dark:border-amber-800 dark:bg-amber-950/20"
+                : ""
+        }>
           <CardContent className="p-3 sm:p-4">
             <div className="text-[11px] text-muted-foreground sm:text-xs">
-              Frais courtier cumulés
+              Coût des frais courtier
             </div>
-            <div className="mt-0.5 text-base font-bold text-orange-600 sm:mt-1 sm:text-xl">
-              {retirementPoint && retirementPoint.cumulativeFees > 0
-                ? formatEur(retirementPoint.cumulativeFees)
+            <div className={`mt-0.5 text-base font-bold sm:mt-1 sm:text-xl ${
+              feeCost >= 20_000
+                ? "text-red-600 dark:text-red-400"
+                : feeCost >= 5_000
+                  ? "text-orange-600 dark:text-orange-400"
+                  : feeCost > 0
+                    ? "text-amber-600 dark:text-amber-400"
+                    : "text-emerald-600 dark:text-emerald-400"
+            }`}>
+              {feeCost > 0
+                ? `-${formatEur(feeCost)}`
                 : broker ? "0 €" : "—"}
             </div>
-            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-              {broker ? (
-                <>
-                  {monthlyTradeFee > 0 && `Courtage ${formatEur(monthlyTradeFee)}/mois`}
-                  {monthlyTradeFee > 0 && brokerFeeRate > 0 && " + "}
-                  {brokerFeeRate > 0 && `Garde ${(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an`}
-                  {monthlyTradeFee === 0 && brokerFeeRate === 0 && "Aucun frais récurrents"}
-                </>
-              ) : "Sélectionnez un courtier"}
-            </div>
+            {broker && feeCost > 0 && retirementPoint ? (
+              <div className="mt-1 space-y-0.5 text-[10px] sm:text-xs">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Frais payés</span>
+                  <span className="font-mono font-medium text-orange-600 dark:text-orange-400">
+                    {formatEur(retirementPoint.cumulativeFees)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Rendements perdus</span>
+                  <span className="font-mono font-medium text-red-600 dark:text-red-400">
+                    {formatEur(feeCost - retirementPoint.cumulativeFees)}
+                  </span>
+                </div>
+                {broker.fees.custody.max > 0 && (
+                  <p className="mt-1.5 text-[9px] leading-snug text-muted-foreground/70 sm:text-[10px]">
+                    {broker.fees.custody.detail} — réduisent vos rendements de{" "}
+                    {(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
+                {broker
+                  ? "Aucun frais récurrents"
+                  : "Sélectionnez un courtier"}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>

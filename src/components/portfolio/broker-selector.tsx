@@ -23,6 +23,7 @@ const GROUPS = [
   { type: "neocourtier" as const, brokers: ALL_BROKERS.filter((b) => b.type === "neocourtier") },
   { type: "courtier" as const, brokers: ALL_BROKERS.filter((b) => b.type === "courtier") },
   { type: "banque_en_ligne" as const, brokers: ALL_BROKERS.filter((b) => b.type === "banque_en_ligne") },
+  { type: "banque_traditionnelle" as const, brokers: ALL_BROKERS.filter((b) => b.type === "banque_traditionnelle") },
   { type: "gestion_pilotee" as const, brokers: ALL_BROKERS.filter((b) => b.type === "gestion_pilotee") },
 ].filter((g) => g.brokers.length > 0);
 
