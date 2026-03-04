@@ -9,8 +9,11 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
   const isPea = config.envelope === "pea";
   const taxRate = getTaxRate(config.envelope);
 
+  const monthlyTradeFee = config.monthlyTradeFee ?? 0;
+
   let portfolioValue = 0;
   let totalInvested = 0;
+  let cumulativeFees = 0;
 
   if (config.initialCapital !== undefined) {
     portfolioValue = config.initialCapital;
@@ -32,7 +35,16 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
         const contribution = isPea
           ? Math.min(config.monthlyTotal, Math.max(0, PEA_PLAFOND - totalInvested))
           : config.monthlyTotal;
-        portfolioValue = portfolioValue * (1 + monthlyRate) + contribution;
+
+        // Frais de courtage déduits de la contribution effective
+        const netContribution = Math.max(0, contribution - monthlyTradeFee);
+        cumulativeFees += contribution > 0 ? monthlyTradeFee : 0;
+
+        // Frais de garde annuels (déjà déduits via netAnnualReturn, mais trackés)
+        const custodyFeeThisMonth = portfolioValue * (config.annualFeeRate ?? 0) / 12;
+        cumulativeFees += custodyFeeThisMonth;
+
+        portfolioValue = portfolioValue * (1 + monthlyRate) + netContribution;
         totalInvested += contribution;
       }
     }
@@ -46,6 +58,7 @@ export function computeProjection(config: PortfolioConfig): ProjectionPoint[] {
       totalInvested: Math.round(totalInvested),
       projectedValue: Math.round(portfolioValue),
       afterTaxValue,
+      cumulativeFees: Math.round(cumulativeFees),
     };
 
     if (

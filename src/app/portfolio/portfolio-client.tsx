@@ -37,7 +37,7 @@ import { BrokerSelector } from "@/components/portfolio/broker-selector";
 import { EnvelopeToggle } from "@/components/portfolio/envelope-toggle";
 import { PurchasePlanCard } from "@/components/portfolio/purchase-plan-card";
 import { computePurchasePlan, type EtfPriceInfo } from "@/lib/purchase-planner";
-import { getBrokerById, isSelfDirected, estimateAnnualFeeRate, hasManagedOption, estimateManagedFeeRate } from "@/lib/brokers";
+import { getBrokerById, isSelfDirected, estimateAnnualFeeRate, estimateTradeFee, hasManagedOption, estimateManagedFeeRate } from "@/lib/brokers";
 import { PEA_PLAFOND, PEA_TAX_RATE, CTO_TAX_RATE, getTaxRate, type Envelope } from "@/lib/constants";
 import type { BrokerId } from "@/types/broker";
 import type { EtfRankedEntry } from "@/types/etf";
@@ -737,6 +737,13 @@ function ProjectionDashboard({
   const isProfileeMode = managementMode === "profilee" && broker && hasManagedOption(broker);
   const brokerFeeRate = isProfileeMode ? estimateManagedFeeRate(broker) : (broker ? estimateAnnualFeeRate(broker) : 0);
 
+  // Frais de courtage mensuels estimés (basé sur le montant d'investissement mensuel)
+  const monthlyTradeFee = useMemo(() => {
+    if (!broker || !isSelfDirected(broker)) return 0;
+    // Estimer les frais pour un ordre mensuel du montant total
+    return estimateTradeFee(broker, profile.monthlyInvestment);
+  }, [broker, profile.monthlyInvestment]);
+
   // Profil sélectionné pour la gestion profilée
   const [selectedManagedProfile, setSelectedManagedProfile] = useState<string | null>(null);
 
@@ -748,13 +755,14 @@ function ProjectionDashboard({
     retirementAge: profile.retirementAge,
     initialCapital: profile.currentPeaCapital,
     annualFeeRate: brokerFeeRate,
+    monthlyTradeFee,
     envelope,
   };
 
   const projection = useMemo(
     () => computeProjection({ ...baseConfig, expectedAnnualReturn: rate }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [profile, rate, envelope, brokerFeeRate]
+    [profile, rate, envelope, brokerFeeRate, monthlyTradeFee]
   );
 
   const allProjections = useMemo(
@@ -765,23 +773,26 @@ function ProjectionDashboard({
         data: computeProjection({ ...baseConfig, expectedAnnualReturn: r }),
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [profile, envelope, brokerFeeRate]
+    [profile, envelope, brokerFeeRate, monthlyTradeFee]
   );
 
   const chartData = useMemo(() => {
+    // Utiliser la projection du taux sélectionné pour les frais cumulés
+    const selectedProj = allProjections.find((p) => p.rate === rate) ?? allProjections[0];
     const base = allProjections[0].data;
     return base.map((p, i) => {
       const point: Record<string, number | string> = {
         age: p.age,
         year: p.year,
         invested: p.totalInvested,
+        fees: selectedProj.data[i]?.cumulativeFees ?? 0,
       };
       for (const proj of allProjections) {
         point[proj.label] = proj.data[i]?.projectedValue ?? 0;
       }
       return point;
     });
-  }, [allProjections]);
+  }, [allProjections, rate]);
 
   const millionPoint = projection.find((p) => p.projectedValue >= 1_000_000);
   const retirementPoint = projection[projection.length - 1];
@@ -1021,7 +1032,7 @@ function ProjectionDashboard({
       </div>
 
       {/* ── 3. Métriques avancées — immédiat ──────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
         <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="text-[11px] text-muted-foreground sm:text-xs">Revenu mensuel à la retraite</div>
@@ -1032,6 +1043,28 @@ function ProjectionDashboard({
             </div>
             <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
               Règle des 4% · net après {isPea ? "PS" : "flat tax"}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="text-[11px] text-muted-foreground sm:text-xs">
+              Frais courtier cumulés
+            </div>
+            <div className="mt-0.5 text-base font-bold text-orange-600 sm:mt-1 sm:text-xl">
+              {retirementPoint && retirementPoint.cumulativeFees > 0
+                ? formatEur(retirementPoint.cumulativeFees)
+                : broker ? "0 €" : "—"}
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
+              {broker ? (
+                <>
+                  {monthlyTradeFee > 0 && `Courtage ${formatEur(monthlyTradeFee)}/mois`}
+                  {monthlyTradeFee > 0 && brokerFeeRate > 0 && " + "}
+                  {brokerFeeRate > 0 && `Garde ${(brokerFeeRate * 100).toFixed(2).replace(".", ",")} %/an`}
+                  {monthlyTradeFee === 0 && brokerFeeRate === 0 && "Aucun frais récurrents"}
+                </>
+              ) : "Sélectionnez un courtier"}
             </div>
           </CardContent>
         </Card>
@@ -1050,7 +1083,7 @@ function ProjectionDashboard({
             </div>
           </CardContent>
         </Card>
-        <Card className="col-span-2 lg:col-span-1">
+        <Card>
           <CardContent className="p-3 sm:p-4">
             <div className="text-[11px] text-muted-foreground sm:text-xs">Impôt estimé à la retraite</div>
             <div className="mt-0.5 text-base font-bold sm:mt-1 sm:text-xl">
@@ -1103,10 +1136,11 @@ function ProjectionDashboard({
                 }
               />
               <Tooltip
-                formatter={(value, name) => [
-                  `${Math.round(Number(value)).toLocaleString("fr-FR")} €`,
-                  String(name) === "invested" ? "Total versé" : `Scénario ${name}`,
-                ]}
+                formatter={(value, name) => {
+                  const n = String(name);
+                  const label = n === "invested" ? "Total versé" : n === "fees" ? "Frais cumulés" : `Scénario ${n}`;
+                  return [`${Math.round(Number(value)).toLocaleString("fr-FR")} €`, label];
+                }}
                 labelFormatter={(age) => `${age} ans`}
                 contentStyle={{
                   backgroundColor: "var(--card)",
@@ -1171,6 +1205,7 @@ function ProjectionDashboard({
                 <TableHead className="text-right">Total versé</TableHead>
                 <TableHead className="text-right">Valeur brute</TableHead>
                 <TableHead className="text-right">Après impôts</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Frais cumulés</TableHead>
                 <TableHead className="text-right">Revenu/mois (4%)</TableHead>
                 <TableHead>Jalon</TableHead>
               </TableRow>
@@ -1195,6 +1230,9 @@ function ProjectionDashboard({
                       </TableCell>
                       <TableCell className="text-right font-mono text-emerald-600">
                         {p.afterTaxValue.toLocaleString("fr-FR")} €
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-orange-600 hidden sm:table-cell">
+                        {p.cumulativeFees > 0 ? `${p.cumulativeFees.toLocaleString("fr-FR")} €` : "—"}
                       </TableCell>
                       <TableCell className="text-right font-mono text-muted-foreground">
                         {monthlyIncome.toLocaleString("fr-FR")} €
