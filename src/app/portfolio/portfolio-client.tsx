@@ -605,16 +605,18 @@ function EtfStrategyLoader({
   profile,
   selectedProfile,
   onProfileChange,
+  brokerId,
 }: {
   etfsPromise: Promise<EtfRankedEntry[]>;
   profile: UserProfile;
   selectedProfile: RiskProfile;
   onProfileChange: (p: RiskProfile) => void;
+  brokerId?: BrokerId | null;
 }) {
   const etfs = use(etfsPromise);
   const strategy = useMemo(
-    () => computePortfolioStrategy(profile, selectedProfile, etfs),
-    [profile, selectedProfile, etfs]
+    () => computePortfolioStrategy(profile, selectedProfile, etfs, brokerId),
+    [profile, selectedProfile, etfs, brokerId]
   );
   return (
     <EtfStrategySection
@@ -670,8 +672,8 @@ function PurchasePlanLoader({
 
   const etfs = use(etfsPromise);
   const strategy = useMemo(
-    () => computePortfolioStrategy(profile, selectedProfile, etfs),
-    [profile, selectedProfile, etfs]
+    () => computePortfolioStrategy(profile, selectedProfile, etfs, brokerId),
+    [profile, selectedProfile, etfs, brokerId]
   );
 
   const plan = useMemo(() => {
@@ -883,6 +885,7 @@ function ProjectionDashboard({
               profile={profile}
               selectedProfile={selectedRiskProfile}
               onProfileChange={setSelectedRiskProfile}
+              brokerId={brokerId}
             />
           </Suspense>
 

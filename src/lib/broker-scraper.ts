@@ -41,6 +41,8 @@ export interface ScrapedBrokerData {
       feeMatch: string | null;
       profilesMatch: string[];
     } | null;
+    /** Partenariats ETF détectés (émetteurs avec frais réduits/gratuits) */
+    etfPartnerships: string[];
   };
   /** Données croisées depuis les sites de comparaison */
   comparisonFindings: {
@@ -114,6 +116,19 @@ const COUNT_PATTERNS = {
   etf: /(\d[\d\s.,]*\d?)\s*ETF/gi,
   action: /(\d[\d\s.,]*\d?)\s*actions/gi,
 };
+
+// Détection des partenariats ETF (émetteurs avec frais réduits/gratuits)
+const ETF_PARTNERSHIP_PATTERNS = [
+  /(?:ETF|trackers?)\s+(?:iShares|BlackRock)[^.]{0,60}(?:0\s*[€%]|gratuit|sans\s+frais|offert)/gi,
+  /(?:ETF|trackers?)\s+Amundi[^.]{0,60}(?:0\s*[€%]|gratuit|sans\s+frais|remboursé|offert)/gi,
+  /(?:ETF|trackers?)\s+(?:BNP|Lyxor)[^.]{0,60}(?:0\s*[€%]|gratuit|sans\s+frais|remboursé|offert)/gi,
+  /(?:iShares|BlackRock)[^.]{0,60}(?:0\s*€|gratuit|sans\s+frais|courtage\s+offert)/gi,
+  /Amundi[^.]{0,60}(?:remboursé|frais\s+offerts?|0\s*€\s*(?:de\s+)?courtage)/gi,
+  /(?:boursomarkets|sélection\s+partenaire)[^.]{0,60}(?:0\s*[€%]|gratuit|sans\s+frais)/gi,
+  /(?:0\s*[€%]|gratuit|sans\s+frais)[^.]{0,60}(?:ETF|trackers?)\s+(?:iShares|Amundi|BNP|Lyxor)/gi,
+  /partenariat[^.]{0,60}(?:Amundi|iShares|BlackRock|BNP)/gi,
+  /freetrade[^.]{0,40}(?:Amundi|iShares)/gi,
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Patterns gestion profilée / sous mandat
@@ -618,6 +633,7 @@ export async function scrapeBrokerPage(
       inactivity: null,
       transferFee: null,
       managedOption: null,
+      etfPartnerships: [],
     },
     comparisonFindings: [],
     drift: [],
@@ -655,6 +671,9 @@ export async function scrapeBrokerPage(
     extractMatches(combinedText, INACTIVITY_PATTERNS)[0] ?? null;
   result.findings.transferFee =
     extractMatches(combinedText, TRANSFER_PATTERNS)[0] ?? null;
+
+  // ── Extraction des partenariats ETF ──────────────────────────────────────
+  result.findings.etfPartnerships = extractMatches(combinedText, ETF_PARTNERSHIP_PATTERNS).slice(0, 10);
 
   // ── Extraction spécifique au courtier ───────────────────────────────────
   const specificPatterns = BROKER_SPECIFIC_PATTERNS[broker.id];

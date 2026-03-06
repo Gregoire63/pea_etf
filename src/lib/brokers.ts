@@ -11,6 +11,8 @@
 import { PEA_BROKERS, type PeaBroker, type FeeModel } from "@/data/pea-brokers";
 import type { BrokerId } from "@/types/broker";
 import type { ExtractedFees, Confidence } from "./broker-fee-extractor";
+import type { ExtractedPartnerships } from "./broker-partnership-extractor";
+import type { BrokerDiscoveryResult } from "./broker-discovery";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auto-expiration des promotions
@@ -77,6 +79,8 @@ export interface FreshBroker extends PeaBroker {
 interface ScraperResult {
   driftMap: Map<string, string[]>;
   overrideMap: Map<string, ExtractedFees>;
+  partnershipMap: Map<string, ExtractedPartnerships>;
+  discovery: BrokerDiscoveryResult | null;
 }
 
 const g = globalThis as unknown as {
@@ -98,10 +102,10 @@ const DRIFT_CACHE_MS = 24 * 60 * 60 * 1000; // 24h
  * Les frais "medium"/"low" sont reportés dans driftWarnings sans modifier les données.
  */
 export async function getBrokers(): Promise<FreshBroker[]> {
-  const { driftMap, overrideMap } = await getScraperResult();
+  const { driftMap, overrideMap, discovery } = await getScraperResult();
   const now = new Date();
 
-  return PROCESSED_BROKERS.map((broker) => {
+  const results: FreshBroker[] = PROCESSED_BROKERS.map((broker) => {
     const lastChecked = new Date(broker.lastChecked);
     const daysSinceCheck = Math.floor(
       (now.getTime() - lastChecked.getTime()) / (1000 * 60 * 60 * 24),
@@ -125,6 +129,27 @@ export async function getBrokers(): Promise<FreshBroker[]> {
       },
     };
   });
+
+  // Merge discovered brokers (stubs) into the list
+  if (discovery?.newBrokers) {
+    const knownIds = new Set(PROCESSED_BROKERS.map((b) => b.id));
+    for (const db of discovery.newBrokers) {
+      if (db.brokerStub && !knownIds.has(db.brokerStub.id)) {
+        knownIds.add(db.brokerStub.id);
+        results.push({
+          ...db.brokerStub,
+          freshness: {
+            daysSinceCheck: 0,
+            stale: false,
+            driftWarnings: ["Courtier decouvert automatiquement — donnees partielles"],
+            overrides: [],
+          },
+        });
+      }
+    }
+  }
+
+  return results;
 }
 
 async function getScraperResult(): Promise<ScraperResult> {
@@ -146,12 +171,17 @@ async function getScraperResult(): Promise<ScraperResult> {
 async function runDriftScraper(): Promise<ScraperResult> {
   const driftMap = new Map<string, string[]>();
   const overrideMap = new Map<string, ExtractedFees>();
+  const partnershipMap = new Map<string, ExtractedPartnerships>();
 
   try {
     const { scrapeAllBrokerPages } = await import("./broker-scraper");
     const { extractBrokerFees } = await import("./broker-fee-extractor");
-    console.info("[Brokers] Lancement du drift scraper + extraction de frais…");
+    const { extractBrokerPartnerships } = await import("./broker-partnership-extractor");
+    console.info("[Brokers] Lancement du drift scraper + extraction de frais + partenariats…");
     const results = await scrapeAllBrokerPages(PEA_BROKERS);
+
+    // Build a broker name lookup
+    const brokerNames = new Map(PEA_BROKERS.map((b) => [b.id, b.name]));
 
     for (const result of results) {
       // ── Drift warnings ──
@@ -167,15 +197,26 @@ async function runDriftScraper(): Promise<ScraperResult> {
         driftMap.set(result.brokerId, warnings);
       }
 
-      // ── Fee extraction ──
       if (result.combinedText) {
         const compText = result.comparisonFindings
           .map((cf) => cf.fees.join(" ") + " " + cf.managedMentions.join(" "))
           .join(" ");
 
+        // ── Fee extraction ──
         const extracted = extractBrokerFees(result.brokerId, result.combinedText, compText);
         if (Object.keys(extracted).length > 0) {
           overrideMap.set(result.brokerId, extracted);
+        }
+
+        // ── Partnership extraction ──
+        const partnerships = extractBrokerPartnerships(
+          result.brokerId,
+          brokerNames.get(result.brokerId) ?? result.brokerId,
+          result.combinedText,
+          compText,
+        );
+        if (partnerships.deals.length > 0 || partnerships.allFree) {
+          partnershipMap.set(result.brokerId, partnerships);
         }
       }
     }
@@ -183,14 +224,26 @@ async function runDriftScraper(): Promise<ScraperResult> {
     const highCount = [...overrideMap.values()].filter((e) =>
       Object.values(e).some((f) => f?.confidence === "high"),
     ).length;
+    const partnershipCount = [...partnershipMap.values()].reduce(
+      (sum, p) => sum + p.deals.length, 0,
+    );
     console.info(
-      `[Brokers] Scraper terminé : ${driftMap.size} drift(s), ${overrideMap.size} extraction(s), ${highCount} haute confiance`,
+      `[Brokers] Scraper terminé : ${driftMap.size} drift(s), ${overrideMap.size} extraction(s), ${highCount} haute confiance, ${partnershipCount} partenariat(s)`,
     );
   } catch (error) {
     console.error("[Brokers] Drift scraper échoué :", error);
   }
 
-  const scraperResult: ScraperResult = { driftMap, overrideMap };
+  // ── Broker discovery (run in parallel, non-blocking) ──
+  let discovery: BrokerDiscoveryResult | null = null;
+  try {
+    const { discoverNewPeaBrokers } = await import("./broker-discovery");
+    discovery = await discoverNewPeaBrokers(PEA_BROKERS);
+  } catch (error) {
+    console.error("[Brokers] Broker discovery échoué :", error);
+  }
+
+  const scraperResult: ScraperResult = { driftMap, overrideMap, partnershipMap, discovery };
   g.__brokerDriftCache = { data: scraperResult, timestamp: Date.now() };
   return scraperResult;
 }
@@ -303,7 +356,17 @@ function applyOverrides(
 
 export function getBrokerById(id: BrokerId): PeaBroker {
   const broker = PROCESSED_BROKERS.find((b) => b.id === id);
-  if (!broker) throw new Error(`Courtier inconnu : ${id}`);
+  if (!broker) {
+    // Check discovered brokers from cache
+    const cached = g.__brokerDriftCache;
+    if (cached?.data.discovery?.newBrokers) {
+      const discovered = cached.data.discovery.newBrokers.find(
+        (db) => db.brokerStub?.id === id,
+      );
+      if (discovered?.brokerStub) return discovered.brokerStub;
+    }
+    throw new Error(`Courtier inconnu : ${id}`);
+  }
   return broker;
 }
 
@@ -416,6 +479,31 @@ export function estimateManagedFeeRate(broker: PeaBroker): number {
  * dans le plan d'achat mensuel).
  *
  * @returns Taux annuel en décimal (ex: 0.016 pour 1.60 %)
+ */
+
+/**
+ * Retourne les partenariats extraits dynamiquement par le scraper.
+ * Utilisé par broker-partnerships.ts pour fusionner avec les données hardcodées.
+ * Retourne une Map vide si le scraper n'a pas encore tourné.
+ */
+export async function getScrapedPartnerships(): Promise<Map<string, ExtractedPartnerships>> {
+  const result = await getScraperResult();
+  return result.partnershipMap;
+}
+
+/**
+ * Retourne les résultats de la découverte de nouveaux courtiers PEA.
+ * null si la découverte n'a pas encore tourné ou a échoué.
+ */
+export async function getBrokerDiscoveryResult(): Promise<BrokerDiscoveryResult | null> {
+  const result = await getScraperResult();
+  return result.discovery;
+}
+
+/**
+ * Estime le taux de frais annuels recurrents du courtier (en decimal).
+ * Inclut gestion pilotee + droits de garde. Les frais de courtage par ordre
+ * ne sont PAS inclus ici.
  */
 export function estimateAnnualFeeRate(broker: PeaBroker): number {
   // Gestion pilotée : frais de gestion all-inclusive (Yomoni, Ramify)

@@ -381,6 +381,17 @@ export function detectCategory(
   return { category: null, index: null };
 }
 
+/**
+ * Categories whose underlying holdings are predominantly EU-based (≥75%)
+ * and thus inherently satisfy the PEA equity requirement regardless of
+ * the fund's domicile.
+ */
+const EU_HEAVY_CATEGORIES: ReadonlySet<EtfCategory> = new Set([
+  "Eurozone",
+  "France",
+  "Europe",
+]);
+
 export function computePeaConfidence(
   name: string,
   isin: string,
@@ -395,11 +406,32 @@ export function computePeaConfidence(
     }
   }
 
+  const { category } = detectCategory(name);
+  const hasPeaKeyword = PEA_KEYWORDS.some((p) => p.test(name));
+  const hasSwapKeyword = /\bSwap\b/i.test(name);
+
+  // ── IE-domiciled ETFs tracking non-EU indices ──────────────────────────
+  // Physical-replication IE ETFs on World/US/Emerging/Japan/Asia indices
+  // are NOT PEA-eligible (underlying < 75% EU equities).
+  // Only swap-based versions (with "PEA" or "Swap" in name) qualify.
+  if (
+    isin.startsWith("IE") &&
+    category &&
+    !EU_HEAVY_CATEGORIES.has(category) &&
+    !hasPeaKeyword &&
+    !hasSwapKeyword
+  ) {
+    return {
+      confidence: 5,
+      reason: `ETF IE sur indice non-UE (${category}) sans mention PEA/Swap — non éligible PEA`,
+    };
+  }
+
   let confidence = 30; // Base pour un ETF actions sur Euronext Paris
   const reasons: string[] = [];
 
   // "PEA" dans le nom → quasi certain
-  if (PEA_KEYWORDS.some((p) => p.test(name))) {
+  if (hasPeaKeyword) {
     confidence += 50;
     reasons.push("Mention PEA dans le nom");
   }
@@ -420,18 +452,13 @@ export function computePeaConfidence(
   }
 
   // Catégorie reconnue (indice actions)
-  const { category } = detectCategory(name);
   if (category && category !== "Leveraged") {
     confidence += 10;
     reasons.push(`Indice actions reconnu (${category})`);
   }
 
   // Indice 100% zone euro → presque toujours PEA
-  if (
-    category === "Eurozone" ||
-    category === "France" ||
-    category === "Europe"
-  ) {
+  if (category && EU_HEAVY_CATEGORIES.has(category)) {
     confidence += 10;
     reasons.push("Indice majoritairement UE");
   }

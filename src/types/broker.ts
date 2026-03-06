@@ -1,6 +1,10 @@
 import type { PeaBroker } from "@/data/pea-brokers";
 
-export type BrokerId =
+/**
+ * IDs des courtiers connus (hardcodes dans pea-brokers.ts).
+ * Les courtiers decouverts dynamiquement utilisent des IDs string arbitraires.
+ */
+export type KnownBrokerId =
   | "trade-republic"
   | "xtb"
   | "interactive-brokers"
@@ -22,6 +26,12 @@ export type BrokerId =
   | "banque-populaire"
   | "goodvest"
   | "nalo";
+
+/**
+ * Accepte les IDs connus + les IDs decouverts dynamiquement.
+ * Utiliser KnownBrokerId quand on a besoin de type-checking strict.
+ */
+export type BrokerId = KnownBrokerId | (string & {});
 
 // ── Plan d'achat mensuel ────────────────────────────────────────────────────
 
