@@ -93,7 +93,11 @@ const CATEGORY_HISTORICAL_RETURNS: Partial<Record<EtfCategory, number>> = {
   Emerging: 0.06,
   Asia: 0.065,
   Japan: 0.05,
+  UK: 0.065,
+  Germany: 0.07,
+  Nordic: 0.08,
   Sector: 0.07,
+  Dividend: 0.065,
   Leveraged: 0.12,
 };
 
@@ -107,7 +111,11 @@ const CATEGORY_HISTORICAL_VOL: Partial<Record<EtfCategory, number>> = {
   Emerging: 0.22,
   Asia: 0.21,
   Japan: 0.19,
+  UK: 0.17,
+  Germany: 0.19,
+  Nordic: 0.18,
   Sector: 0.20,
+  Dividend: 0.15,
   Leveraged: 0.35,
 };
 
@@ -116,7 +124,8 @@ const CATEGORY_HISTORICAL_VOL: Partial<Record<EtfCategory, number>> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FALLBACK_ETF: Record<string, { isin: string; ticker: string; shortName: string; index: string }> = {
-  WPEA:  { isin: "IE0002XZSHO1", ticker: "WPEA.PA",  shortName: "Amundi MSCI World PEA",              index: "MSCI World" },
+  WPEA:  { isin: "IE0002XZSHO1", ticker: "WPEA.PA",  shortName: "iShares MSCI World Swap PEA",        index: "MSCI World" },
+  SPEA:  { isin: "IE000DQLYVB9", ticker: "SPEA.PA",  shortName: "iShares S&P 500 Swap PEA",           index: "S&P 500" },
   PSP5:  { isin: "FR0011871128", ticker: "PSP5.PA",  shortName: "Amundi PEA S&P 500",                 index: "S&P 500" },
   ETZ:   { isin: "FR0011550193", ticker: "ETZ.PA",   shortName: "Amundi STOXX Europe 600",            index: "STOXX Europe 600" },
   MEUD:  { isin: "FR0007054358", ticker: "MEUD.PA",  shortName: "Amundi EURO STOXX 50 (Distribuant)", index: "EURO STOXX 50" },
@@ -137,15 +146,18 @@ const FALLBACK_ETF: Record<string, { isin: string; ticker: string; shortName: st
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Score bonus par type de deal courtier ──────────────────────────────────
-// free/all_free = 0 € de frais → gros avantage, +5 pts
-// capped = frais plafonnés (ex: 0,99 €) → avantage modéré, +3 pts
+// free/all_free = 0 € de frais → gros avantage pour le DCA mensuel, +8 pts
+// capped = frais plafonnés (ex: 0,99 €) → avantage modéré, +4 pts
 // reimbursed = 1er ordre remboursé/mois → avantage ponctuel, +2 pts
 const BROKER_DEAL_BONUS: Record<string, number> = {
-  all_free: 5,
-  free: 5,
-  capped: 3,
+  all_free: 8,
+  free: 8,
+  capped: 4,
   reimbursed: 2,
 };
+
+/** Bonus maximum possible (pour le pre-filtrage avec marge) */
+const MAX_BROKER_BONUS = 8;
 
 /** Info sur le deal courtier qui a pu influencer la selection. */
 interface SlotSelection {
@@ -167,12 +179,25 @@ function selectBestForSlot(
   preferAcc: boolean,
   brokerId?: string,
 ): SlotSelection | null {
+  // Les courtiers "tout gratuit" (XTB, Trade Republic) donnent le même bonus
+  // à TOUS les ETFs → le bonus ne change pas le classement relatif.
+  // On ne l'applique pas au score (effet neutre) mais il est pris en compte
+  // dans l'optimisation des poids (meilleure efficacité coût-ajustée).
+  const isAllFreeBroker = brokerId ? ALL_FREE_BROKER_IDS.has(brokerId) : false;
+
+  // Seuil de pre-filtrage : plus bas quand un broker a des deals spécifiques
+  // (pas all_free), car le bonus courtier peut rattraper un score inférieur.
+  // Ex: iShares score 35 + bonus free BoursoBank 8 = 43 → devrait être candidat.
+  const preFilterThreshold = (brokerId && !isAllFreeBroker)
+    ? MIN_SCORE_THRESHOLD - MAX_BROKER_BONUS
+    : MIN_SCORE_THRESHOLD;
+
   const baseCandidates = rankedEtfs
     .filter((etf) => slot.categories.includes(etf.category))
     .filter((etf) => !slot.excludeLeveraged || !etf.leveraged)
     .filter((etf) => !slot.distribution || etf.distribution === slot.distribution)
     .filter((etf) => !alreadySelected.has(etf.isin))
-    .filter((etf) => etf.score >= MIN_SCORE_THRESHOLD)
+    .filter((etf) => etf.score >= preFilterThreshold)
     .filter((etf) => {
       if (slot.allowedIndices) {
         return slot.allowedIndices.some((t) => etf.index.toLowerCase().includes(t.toLowerCase()));
@@ -190,6 +215,7 @@ function selectBestForSlot(
 
   // Score sans bonus courtier (pour comparer)
   const neutralScored = baseCandidates
+    .filter((etf) => etf.score >= MIN_SCORE_THRESHOLD)
     .map((etf) => {
       let score = etf.score;
       if (preferAcc && !slot.distribution && etf.distribution === "ACC") score += 3;
@@ -197,9 +223,17 @@ function selectBestForSlot(
     })
     .sort((a, b) => b.score - a.score);
 
-  const neutralBest = neutralScored[0].etf;
+  const neutralBest = neutralScored.length > 0 ? neutralScored[0].etf : null;
 
   // Score avec bonus courtier
+  // Pour les courtiers "all_free", pas de bonus de score (neutre car appliqué
+  // uniformément), mais le dealType est quand même enregistré pour l'affichage
+  // et l'optimisation des poids.
+  //
+  // Bonus "même indice" : quand un ETF avec deal courtier tracke le même indice
+  // que le meilleur candidat sans deal, la différence de score est souvent due
+  // à la disponibilité des données (ETF récent) et non à la qualité. Dans ce cas,
+  // on applique un bonus plus fort car le coût total (TER + frais) est ce qui compte.
   const scored = baseCandidates
     .map((etf) => {
       let adjustedScore = etf.score;
@@ -214,17 +248,41 @@ function selectBestForSlot(
         const dt = hasReducedFeesForBroker(etf.issuer, brokerId);
         if (dt) {
           dealType = dt;
-          dealBonus = BROKER_DEAL_BONUS[dt] ?? 0;
-          adjustedScore += dealBonus;
+          if (dt !== "all_free") {
+            dealBonus = BROKER_DEAL_BONUS[dt] ?? 0;
+
+            // Bonus "même indice" : si l'ETF avec deal tracke le même indice que
+            // le meilleur sans deal ET a un TER <= , le score écart est un artefact
+            // de données (ETF récent) → bonus renforcé pour refléter l'avantage coût.
+            if (neutralBest && etf.isin !== neutralBest.isin && (dt === "free" || dt === "capped")) {
+              const sameIndex = normalizeIndex(etf.index) === normalizeIndex(neutralBest.index);
+              if (sameIndex && etf.ter <= neutralBest.ter) {
+                // Le score gap est artificiel — l'ETF gratuit est objectivement meilleur
+                // car même indice, TER <=, et 0€ de frais de trading.
+                // Bonus = combler 80% de l'écart (le score de base reste un signal).
+                const gap = neutralBest.score - etf.score;
+                if (gap > 0) {
+                  const sameIndexBonus = Math.round(gap * 0.8);
+                  dealBonus += sameIndexBonus;
+                }
+              }
+            }
+
+            adjustedScore += dealBonus;
+          }
         }
       }
 
       return { etf, adjustedScore, dealType, dealBonus };
     })
+    // Post-filtre : le score ajusté (base + bonus) doit atteindre le seuil
+    .filter((s) => s.adjustedScore >= MIN_SCORE_THRESHOLD)
     .sort((a, b) => b.adjustedScore - a.adjustedScore);
 
+  if (scored.length === 0) return null;
+
   const best = scored[0];
-  const dealChangedPick = best.etf.isin !== neutralBest.isin;
+  const dealChangedPick = neutralBest ? best.etf.isin !== neutralBest.isin : false;
 
   return {
     etf: best.etf,
@@ -233,6 +291,19 @@ function selectBestForSlot(
     dealChangedPick,
     neutralPick: dealChangedPick ? neutralBest : null,
   };
+}
+
+/**
+ * Normalise un nom d'indice pour la comparaison "même indice".
+ * Ex: "S&P 500", "S&P500", "S&P 500 (EUR)" → "sp500"
+ *     "MSCI World", "MSCI World Swap PEA" → "msciworld"
+ */
+function normalizeIndex(index: string): string {
+  return index
+    .toLowerCase()
+    .replace(/\s*(swap|pea|ucits|etf|eur|usd|acc|dist|hedged|nr|tr)\b/gi, "")
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
 }
 
 function etfToStrategy(
@@ -790,21 +861,34 @@ function buildDynamicStrategy(
     let selection = selectBestForSlot(rankedEtfs, slot, alreadySelected, preferAcc, brokerId);
 
     // Fallback : si aucun ETF ne correspond aux filtres du slot,
-    // chercher le fallbackIsin dans les données disponibles (même seuil de score)
+    // chercher le fallbackIsin dans les données disponibles (avec bonus courtier si applicable)
     if (!selection && slot.fallbackIsin) {
       const fallback = rankedEtfs.find(
-        (e) => e.isin === slot.fallbackIsin
-          && !alreadySelected.has(e.isin)
-          && e.score >= MIN_SCORE_THRESHOLD,
+        (e) => e.isin === slot.fallbackIsin && !alreadySelected.has(e.isin),
       );
       if (fallback) {
-        selection = {
-          etf: fallback,
-          dealType: null,
-          dealBonus: 0,
-          dealChangedPick: false,
-          neutralPick: null,
-        };
+        let fbDealType: string | null = null;
+        let fbDealBonus = 0;
+        if (brokerId) {
+          const dt = hasReducedFeesForBroker(fallback.issuer, brokerId);
+          if (dt) {
+            fbDealType = dt;
+            // all_free = neutre (tous les ETFs le reçoivent)
+            if (dt !== "all_free") {
+              fbDealBonus = BROKER_DEAL_BONUS[dt] ?? 0;
+            }
+          }
+        }
+        const adjustedScore = fallback.score + fbDealBonus;
+        if (adjustedScore >= MIN_SCORE_THRESHOLD) {
+          selection = {
+            etf: fallback,
+            dealType: fbDealType,
+            dealBonus: fbDealBonus,
+            dealChangedPick: false,
+            neutralPick: null,
+          };
+        }
       }
     }
 

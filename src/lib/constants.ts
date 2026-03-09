@@ -33,7 +33,11 @@ export const CATEGORY_LABELS: Record<string, string> = {
   Emerging: "Emergents",
   Asia: "Asie",
   Japan: "Japon",
+  UK: "Royaume-Uni",
+  Germany: "Allemagne",
+  Nordic: "Nordiques",
   Sector: "Sectoriel",
+  Dividend: "Dividendes",
   Leveraged: "Levier",
 };
 
@@ -46,7 +50,11 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Emerging: "bg-orange-100  text-orange-800  dark:bg-transparent dark:border-orange-500/60  dark:text-orange-400",
   Asia:     "bg-amber-100   text-amber-800   dark:bg-transparent dark:border-amber-500/60   dark:text-amber-400",
   Japan:    "bg-red-100     text-red-800     dark:bg-transparent dark:border-red-500/60     dark:text-red-400",
+  UK:       "bg-slate-100   text-slate-800   dark:bg-transparent dark:border-slate-500/60   dark:text-slate-400",
+  Germany:  "bg-yellow-100  text-yellow-800  dark:bg-transparent dark:border-yellow-500/60  dark:text-yellow-400",
+  Nordic:   "bg-cyan-100    text-cyan-800    dark:bg-transparent dark:border-cyan-500/60    dark:text-cyan-400",
   Sector:   "bg-purple-100  text-purple-800  dark:bg-transparent dark:border-purple-500/60  dark:text-purple-400",
+  Dividend: "bg-teal-100    text-teal-800    dark:bg-transparent dark:border-teal-500/60    dark:text-teal-400",
   Leveraged:"bg-rose-100    text-rose-800    dark:bg-transparent dark:border-rose-500/60    dark:text-rose-400",
 };
 

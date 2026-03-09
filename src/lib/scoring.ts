@@ -24,11 +24,12 @@ export type ScoringInput = {
 
 /**
  * Normalise une valeur entre 0 et 100 par rapport aux bornes best/worst.
- * Les données manquantes (null) reçoivent un score légèrement pénalisant (30/100)
- * plutôt que la médiane (50) : l'absence de données est un signal négatif.
+ * Les données manquantes (null) reçoivent un score neutre (50/100).
+ * La pénalité pour données manquantes est appliquée séparément via
+ * le facteur dataCoverage dans computeScore().
  */
 function normalize(value: number | null, best: number, worst: number): number {
-  if (value === null) return 30;
+  if (value === null) return 50;
   if (best === worst) return 50;
   const min = Math.min(best, worst);
   const max = Math.max(best, worst);
@@ -128,6 +129,17 @@ export function computeScore(
     : etf.aum !== null && etf.aum < 50_000_000 ? 0.93
     : 1.0;
 
+  // ── Couverture données : pénalité douce pour les métriques manquantes ──
+  // Chaque métrique manquante (sauf TER, toujours dispo) réduit légèrement le score.
+  // 4/4 métriques = 1.00, 3/4 = 0.97, 2/4 = 0.94, 1/4 = 0.91, 0/4 = 0.88
+  const availableMetrics = [
+    perfValue !== null,
+    etf.aum !== null,
+    etf.sharpeRatio !== null,
+    etf.maxDrawdown !== null,
+  ].filter(Boolean).length;
+  const dataCoverage = 1.0 - (4 - availableMetrics) * 0.03;
+
   const compositeScore =
     (SCORING_WEIGHTS.ter * terScore +
       SCORING_WEIGHTS.performance * performanceScore +
@@ -135,7 +147,8 @@ export function computeScore(
       SCORING_WEIGHTS.sharpe * sharpeScore +
       SCORING_WEIGHTS.drawdown * drawdownScore) *
     leveragePenalty *
-    aumFloorPenalty;
+    aumFloorPenalty *
+    dataCoverage;
 
   return {
     score: Math.round(compositeScore * 10) / 10,
@@ -145,6 +158,7 @@ export function computeScore(
       aumScore: Math.round(aumScore),
       sharpeScore: Math.round(sharpeScore),
       drawdownScore: Math.round(drawdownScore),
+      dataCoverage: availableMetrics,
     },
   };
 }

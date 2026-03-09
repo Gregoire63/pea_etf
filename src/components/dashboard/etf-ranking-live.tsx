@@ -73,6 +73,7 @@ function catalogToPlaceholder(base: CatalogEntry): EtfRankedEntry {
       aumScore: 0,
       sharpeScore: 0,
       drawdownScore: 0,
+      dataCoverage: 0,
     },
     rank: 0,
   };

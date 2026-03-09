@@ -17,6 +17,7 @@ import { CategoryBadge } from "./category-badge";
 import { EtfFilters } from "./etf-filters";
 import { ScoreWeightsConfigurator } from "./score-weights-configurator";
 import { useScoreWeights } from "@/hooks/use-score-weights";
+import { rescoreEtfs } from "@/lib/rescore-etfs";
 import { ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
 import type { EtfRankedEntry, BrokerDealInfo } from "@/types/etf";
 
@@ -75,38 +76,14 @@ export function EtfRankingTable({ etfs }: Props) {
   const [sortAsc, setSortAsc] = useState(true);
   const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
 
-  const { weights, normalizedWeights, isCustom, updateWeights, resetWeights } =
+  const { weights, isCustom, updateWeights, resetWeights } =
     useScoreWeights();
 
   // Recompute composite scores and ranks using custom weights
-  const etfsWithCustomScores = useMemo(() => {
-    const leverageMultiplier = (100 - weights.leveragePenalty) / 100;
-    const scored = etfs.map((etf) => {
-      const { terScore, performanceScore, aumScore, sharpeScore, drawdownScore } =
-        etf.scoreBreakdown;
-      const penalty = etf.leveraged ? leverageMultiplier : 1.0;
-      const aumFloorPenalty =
-        etf.aum !== null && etf.aum < 20_000_000 ? 0.85
-        : etf.aum !== null && etf.aum < 50_000_000 ? 0.93
-        : 1.0;
-      const customScore =
-        Math.round(
-          (normalizedWeights.ter * terScore +
-            normalizedWeights.performance * performanceScore +
-            normalizedWeights.aum * aumScore +
-            normalizedWeights.sharpe * sharpeScore +
-            normalizedWeights.drawdown * drawdownScore) *
-            penalty *
-            aumFloorPenalty *
-            10
-        ) / 10;
-      return { ...etf, score: customScore };
-    });
-
-    // Re-rank by custom score descending
-    const sortedByScore = [...scored].sort((a, b) => b.score - a.score);
-    return sortedByScore.map((etf, i) => ({ ...etf, rank: i + 1 }));
-  }, [etfs, normalizedWeights, weights.leveragePenalty]);
+  const etfsWithCustomScores = useMemo(
+    () => rescoreEtfs(etfs, weights),
+    [etfs, weights],
+  );
 
   // Dynamic score tooltip reflecting current weights
   const scoreTooltip = useMemo(() => {

@@ -133,6 +133,16 @@ export const INDEX_PATTERNS: Array<{
     category: "World",
     index: "FTSE Developed World",
   },
+  {
+    pattern: /Solactive\s+GBS\s+Developed\s+Markets/i,
+    category: "World",
+    index: "Solactive GBS Developed Markets",
+  },
+  {
+    pattern: /\bACWI\b(?!\s+IMI)/i,
+    category: "World",
+    index: "MSCI ACWI",
+  },
 
   // US
   {
@@ -156,6 +166,11 @@ export const INDEX_PATTERNS: Array<{
     pattern: /\bUS(?:A)?\s+(?:Value|Growth|Cons|Qual)/i,
     category: "US",
     index: "MSCI USA",
+  },
+  {
+    pattern: /\bPEA\s+(?:US|USA|S&P|SP)\b/i,
+    category: "US",
+    index: "S&P 500",
   },
 
   // Europe
@@ -225,6 +240,11 @@ export const INDEX_PATTERNS: Array<{
   },
   {
     pattern: /\bMSCI\s+EM\b/i,
+    category: "Emerging",
+    index: "MSCI Emerging Markets",
+  },
+  {
+    pattern: /\bPEA\s+Emerg/i,
     category: "Emerging",
     index: "MSCI Emerging Markets",
   },
@@ -314,12 +334,369 @@ export const INDEX_PATTERNS: Array<{
     category: "Sector",
     index: "S&P Global Luxury",
   },
+  {
+    pattern: /Telecommunic|Telecom\b/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Telecommunications",
+  },
+  {
+    pattern: /Industr(?:y|ial|ies)/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Industrial Goods",
+  },
+  {
+    pattern: /Auto(?:mob)?(?:ile)?s?\b/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Automobiles",
+  },
+  {
+    pattern: /Insurance/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Insurance",
+  },
+  {
+    pattern: /Food\s*(?:&\s*)?Bev/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Food & Beverage",
+  },
+  {
+    pattern: /Media\b/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Media",
+  },
+  {
+    pattern: /Retail/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Retail",
+  },
+  {
+    pattern: /Construc(?:tion)?/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Construction",
+  },
+  {
+    pattern: /Chemicals?\b/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Chemicals",
+  },
+  {
+    pattern: /Basic\s+Resources?|Materials?\b/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Basic Resources",
+  },
+  {
+    pattern: /Oil\s*(?:&\s*)?Gas/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Oil & Gas",
+  },
+  {
+    pattern: /Financ(?:e|ial)/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Financial Services",
+  },
+  {
+    pattern: /Travel|Tourism|Leisure/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Travel & Leisure",
+  },
+  {
+    pattern: /Personal\s*(?:&\s*)?Household/i,
+    category: "Sector",
+    index: "STOXX Europe 600 Personal & Household Goods",
+  },
+  {
+    pattern: /Cyber\s*Security|Cyber\b/i,
+    category: "Sector",
+    index: "ISE Cyber Security",
+  },
+  {
+    pattern: /Climate\s+(?:Change|Action|Transition)|PAB\b|CTB\b/i,
+    category: "World",
+    index: "MSCI World Climate",
+  },
+  {
+    pattern: /Smart\s*City|Infra(?:structure)?/i,
+    category: "Sector",
+    index: "Infrastructure",
+  },
+  {
+    pattern: /Agri(?:culture|business|food)|Food\s+Innovation/i,
+    category: "Sector",
+    index: "Agribusiness",
+  },
+  {
+    pattern: /Digit(?:al)?(?:isation|ization|al\s+Economy)/i,
+    category: "Sector",
+    index: "Digital Economy",
+  },
+  {
+    pattern: /Semiconduc/i,
+    category: "Sector",
+    index: "Semiconductors",
+  },
+  {
+    pattern: /Cloud\s+Comput/i,
+    category: "Sector",
+    index: "Cloud Computing",
+  },
+  {
+    pattern: /Gaming|Video\s+Games|Esport/i,
+    category: "Sector",
+    index: "Video Gaming & Esports",
+  },
+  {
+    pattern: /Blockchain|Metaverse|Web3/i,
+    category: "Sector",
+    index: "Blockchain & Digital Assets",
+  },
+
+  // UK
+  {
+    pattern: /FTSE\s+100\b/i,
+    category: "UK",
+    index: "FTSE 100",
+  },
+  { pattern: /MSCI\s+UK\b/i, category: "UK", index: "MSCI UK" },
+  {
+    pattern: /MSCI\s+United\s+Kingdom/i,
+    category: "UK",
+    index: "MSCI United Kingdom",
+  },
+
+  // Germany
+  { pattern: /\bDAX\b/i, category: "Germany", index: "DAX" },
+  { pattern: /MSCI\s+Germany/i, category: "Germany", index: "MSCI Germany" },
+
+  // Nordic
+  {
+    pattern: /MSCI\s+Nordic/i,
+    category: "Nordic",
+    index: "MSCI Nordic",
+  },
+
+  // Country-specific (mapped to closest broad category)
+  {
+    pattern: /IBEX\s*35/i,
+    category: "Eurozone",
+    index: "IBEX 35",
+  },
+  { pattern: /MSCI\s+Spain/i, category: "Eurozone", index: "MSCI Spain" },
+  { pattern: /MSCI\s+Italy/i, category: "Eurozone", index: "MSCI Italy" },
+  {
+    pattern: /FTSE\s+MIB/i,
+    category: "Eurozone",
+    index: "FTSE MIB",
+  },
+  { pattern: /MSCI\s+Greece/i, category: "Eurozone", index: "MSCI Greece" },
+  {
+    pattern: /MSCI\s+Netherl/i,
+    category: "Eurozone",
+    index: "MSCI Netherlands",
+  },
+  { pattern: /MSCI\s+Belgium/i, category: "Eurozone", index: "MSCI Belgium" },
+  { pattern: /MSCI\s+Austria/i, category: "Eurozone", index: "MSCI Austria" },
+  { pattern: /MSCI\s+Ireland/i, category: "Eurozone", index: "MSCI Ireland" },
+  { pattern: /MSCI\s+Finland/i, category: "Eurozone", index: "MSCI Finland" },
+  {
+    pattern: /MSCI\s+Portug/i,
+    category: "Eurozone",
+    index: "MSCI Portugal",
+  },
+
+  // Swiss (non-EU but common on PEA)
+  {
+    pattern: /\bSMI\b|MSCI\s+Switz|Swiss\b/i,
+    category: "Europe",
+    index: "MSCI Switzerland",
+  },
+
+  // Asia — additional countries
+  {
+    pattern: /MSCI\s+Taiwan/i,
+    category: "Asia",
+    index: "MSCI Taiwan",
+  },
+  {
+    pattern: /Hang\s+Seng|HSI\b/i,
+    category: "Asia",
+    index: "Hang Seng",
+  },
+  { pattern: /KOSPI/i, category: "Asia", index: "KOSPI" },
+  {
+    pattern: /MSCI\s+Pacific(?!\s+(?:ex|Ex))/i,
+    category: "Asia",
+    index: "MSCI Pacific",
+  },
+  {
+    pattern: /MSCI\s+Indonesia/i,
+    category: "Asia",
+    index: "MSCI Indonesia",
+  },
+  {
+    pattern: /MSCI\s+(?:South\s+East\s+Asia|ASEAN)/i,
+    category: "Asia",
+    index: "MSCI South East Asia",
+  },
+
+  // Africa / Middle East (mapped to Emerging)
+  {
+    pattern: /MSCI\s+(?:South\s+)?Africa/i,
+    category: "Emerging",
+    index: "MSCI South Africa",
+  },
+  {
+    pattern: /MSCI\s+(?:EFM|Frontier)/i,
+    category: "Emerging",
+    index: "MSCI Frontier Markets",
+  },
+  {
+    pattern: /\bPEA\s+(?:Brésil|Brazil)\b/i,
+    category: "Emerging",
+    index: "MSCI Brazil",
+  },
+  { pattern: /MSCI\s+Brazil/i, category: "Emerging", index: "MSCI Brazil" },
+
+  // France — additional
+  {
+    pattern: /SBF\s*120/i,
+    category: "France",
+    index: "SBF 120",
+  },
+  {
+    pattern: /\bPEA\s+PME\b/i,
+    category: "France",
+    index: "PEA PME",
+  },
+  {
+    pattern: /CAC\s+Small\b/i,
+    category: "France",
+    index: "CAC Small",
+  },
+  {
+    pattern: /CAC\s+(?:All[- ]?Tradable|AT)\b/i,
+    category: "France",
+    index: "CAC All-Tradable",
+  },
+
+  // Dividend strategies
+  {
+    pattern: /Select\s+Divid/i,
+    category: "Dividend",
+    index: "STOXX Select Dividend",
+  },
+  {
+    pattern: /Divid(?:end)?\s+Aristo/i,
+    category: "Dividend",
+    index: "S&P Dividend Aristocrats",
+  },
+  {
+    pattern: /High\s+Divid/i,
+    category: "Dividend",
+    index: "High Dividend Yield",
+  },
+  {
+    pattern: /STOXX.*Divid|Euro.*Divid|Europ.*Divid/i,
+    category: "Dividend",
+    index: "STOXX Europe Dividend",
+  },
+  {
+    pattern: /Divid(?:end)?(?:s)?\b/i,
+    category: "Dividend",
+    index: "Dividend Strategy",
+  },
+
+  // World ex-regions
+  {
+    pattern: /World\s+ex\s+Euro/i,
+    category: "World",
+    index: "MSCI World ex Euro",
+  },
+  {
+    pattern: /World\s+ex\s+US/i,
+    category: "World",
+    index: "MSCI World ex USA",
+  },
+
+  // EURO STOXX variants (not just 50)
+  {
+    pattern: /EURO\s+STOXX(?!\s+50)/i,
+    category: "Eurozone",
+    index: "EURO STOXX",
+  },
+  {
+    pattern: /STOXX\s+Europe\s+(?:50|Large|Mid|Small)\b/i,
+    category: "Europe",
+    index: "STOXX Europe",
+  },
+
+  // Value / Growth / Quality / Momentum factors (broad)
+  {
+    pattern: /\bValue\b/i,
+    category: "World",
+    index: "MSCI Value",
+  },
+  {
+    pattern: /\bMomentum\b/i,
+    category: "World",
+    index: "MSCI Momentum",
+  },
+  {
+    pattern: /\bQuality\b/i,
+    category: "World",
+    index: "MSCI Quality",
+  },
+  {
+    pattern: /\bGrowth\b/i,
+    category: "World",
+    index: "MSCI Growth",
+  },
+  {
+    pattern: /\bMin(?:imum)?\s*Vol/i,
+    category: "World",
+    index: "MSCI Minimum Volatility",
+  },
+  {
+    pattern: /\bMulti[- ]?Factor/i,
+    category: "World",
+    index: "MSCI Multi-Factor",
+  },
 
   // Leveraged
   {
     pattern: /2[xX]\s+Lever|Daily\s+2x|Leveraged/i,
     category: "Leveraged",
     index: "Leveraged",
+  },
+
+  // ── Catch-all ESG/SRI Europe patterns ──
+  {
+    pattern: /\bEuro(?:pe|zone)?\b.*\b(?:ESG|SRI|Net\s*Zero)\b/i,
+    category: "Europe",
+    index: "MSCI Europe ESG",
+  },
+  {
+    pattern: /\b(?:ESG|SRI|Net\s*Zero)\b.*\bEuro(?:pe|zone)?\b/i,
+    category: "Europe",
+    index: "MSCI Europe ESG",
+  },
+
+  // ── Catch-all: Global/World variants ──
+  {
+    pattern: /\bGlobal\b(?!\s+(?:Gold|Silver|Commodity|Bond|Aggregate))/i,
+    category: "World",
+    index: "Global Equity",
+  },
+
+  // ── Small/mid cap variants ──
+  {
+    pattern: /\bEuro(?:pe)?\s+(?:Small|Mid|Sm)\b/i,
+    category: "Europe",
+    index: "MSCI Europe Small Cap",
+  },
+  {
+    pattern: /\bWorld\s+(?:Small|Mid|Sm)\b/i,
+    category: "World",
+    index: "MSCI World Small Cap",
   },
 ];
 
@@ -390,6 +767,8 @@ const EU_HEAVY_CATEGORIES: ReadonlySet<EtfCategory> = new Set([
   "Eurozone",
   "France",
   "Europe",
+  "Germany",
+  "Nordic",
 ]);
 
 export function computePeaConfidence(
@@ -413,13 +792,17 @@ export function computePeaConfidence(
   // ── IE-domiciled ETFs tracking non-EU indices ──────────────────────────
   // Physical-replication IE ETFs on World/US/Emerging/Japan/Asia indices
   // are NOT PEA-eligible (underlying < 75% EU equities).
-  // Only swap-based versions (with "PEA" or "Swap" in name) qualify.
+  // Only swap-based versions qualify. Detection: "PEA", "Swap", or listed
+  // on Euronext Paris by a PEA provider (iShares, Invesco, SPDR have
+  // dedicated PEA ranges that all use swap replication).
+  const isPeaProvider = PEA_PROVIDERS.some((p) => p.test(name));
   if (
     isin.startsWith("IE") &&
     category &&
     !EU_HEAVY_CATEGORIES.has(category) &&
     !hasPeaKeyword &&
-    !hasSwapKeyword
+    !hasSwapKeyword &&
+    !isPeaProvider
   ) {
     return {
       confidence: 5,
@@ -436,8 +819,8 @@ export function computePeaConfidence(
     reasons.push("Mention PEA dans le nom");
   }
 
-  // Provider connu pour PEA
-  if (PEA_PROVIDERS.some((p) => p.test(name))) {
+  // Provider connu pour PEA (already computed above for IE filter)
+  if (isPeaProvider) {
     confidence += 10;
     reasons.push("Provider PEA reconnu");
   }

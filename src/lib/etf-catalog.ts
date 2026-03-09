@@ -45,6 +45,7 @@ export type BaseCatalogEntry = {
 
 export const SEED_CATALOG: BaseCatalogEntry[] = [
   { isin: "IE0002XZSHO1", yahooTicker: "WPEA.PA",  category: "World",    index: "MSCI World",                   ter: 0.0020, distribution: "ACC",  replication: "Synthetic", leveraged: false },
+  { isin: "IE000DQLYVB9", yahooTicker: "SPEA.PA",  category: "US",       index: "S&P 500",                      ter: 0.0010, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0011871128", yahooTicker: "PSP5.PA",  category: "US",       index: "S&P 500",                      ter: 0.0012, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0011550193", yahooTicker: "ETZ.PA",   category: "Europe",   index: "STOXX Europe 600",             ter: 0.0019, distribution: "ACC",  replication: "Synthetic", leveraged: false },
   { isin: "FR0007054358", yahooTicker: "MEUD.PA",  category: "Eurozone", index: "EURO STOXX 50",                ter: 0.0007, distribution: "DIST", replication: "Physical",  leveraged: false },
@@ -167,9 +168,23 @@ async function buildCatalogFromDiscovery(): Promise<BaseCatalogEntry[]> {
       return SEED_CATALOG;
     }
 
+    // 4. Fusionner avec SEED_CATALOG : garantir que les ETFs essentiels
+    //    sont toujours présents même si Euronext/JustETF les a ratés.
+    const catalogIsins = new Set(catalog.map((e) => e.isin));
+    let seedAdded = 0;
+    for (const seed of SEED_CATALOG) {
+      if (!catalogIsins.has(seed.isin)) {
+        catalog.push(seed);
+        seedAdded++;
+      }
+    }
+    if (seedAdded > 0) {
+      console.info(`[Catalog] +${seedAdded} ETFs essentiels ajoutés depuis SEED_CATALOG`);
+    }
+
     console.info(`[Catalog] Catalogue dynamique construit : ${catalog.length} ETFs PEA`);
 
-    // 4. Mettre en cache
+    // 5. Mettre en cache
     g.__catalogCache = { data: catalog, timestamp: Date.now() };
     return catalog;
   } catch (error) {

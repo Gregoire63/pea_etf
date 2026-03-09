@@ -135,6 +135,7 @@ function buildPartialEntry(raw: RawEtfData): EtfRankedEntry {
       aumScore: 0,
       sharpeScore: 0,
       drawdownScore: 0,
+      dataCoverage: 0,
     },
     rank: 0,
     brokerDeals: deals.length > 0 ? deals : undefined,

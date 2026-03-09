@@ -7,7 +7,11 @@ export type EtfCategory =
   | "Emerging"
   | "Asia"
   | "Japan"
+  | "UK"
+  | "Germany"
+  | "Nordic"
   | "Sector"
+  | "Dividend"
   | "Leveraged";
 
 export interface PeaEtfCatalogEntry {
@@ -52,6 +56,8 @@ export interface ScoreBreakdown {
   aumScore: number;
   sharpeScore: number;
   drawdownScore: number;
+  /** Nombre de métriques disponibles sur 4 (perf, AUM, Sharpe, drawdown). TER toujours dispo. */
+  dataCoverage: number;
 }
 
 // ── Provenance des données multi-sources ─────────────────────────────────────

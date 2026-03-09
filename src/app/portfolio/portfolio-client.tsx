@@ -32,6 +32,8 @@ import {
 import { useUserProfile, type UserProfile } from "@/hooks/use-user-profile";
 import { useBroker } from "@/hooks/use-broker";
 import { useEnvelope } from "@/hooks/use-envelope";
+import { useScoreWeights } from "@/hooks/use-score-weights";
+import { rescoreEtfs } from "@/lib/rescore-etfs";
 import { EtfScoreBadge } from "@/components/dashboard/etf-score-badge";
 import { BrokerSelector } from "@/components/portfolio/broker-selector";
 import { EnvelopeToggle } from "@/components/portfolio/envelope-toggle";
@@ -600,6 +602,8 @@ function EtfStrategySection({
 
 // Charge les données ETF via use() — suspend jusqu'à résolution.
 // Calcule la stratégie ICI avec les données live pour une sélection dynamique.
+// Les poids de scoring personnalisés (localStorage) sont appliqués pour que
+// la stratégie reflète les préférences de classement de l'utilisateur.
 function EtfStrategyLoader({
   etfsPromise,
   profile,
@@ -613,7 +617,12 @@ function EtfStrategyLoader({
   onProfileChange: (p: RiskProfile) => void;
   brokerId?: BrokerId | null;
 }) {
-  const etfs = use(etfsPromise);
+  const rawEtfs = use(etfsPromise);
+  const { weights, isCustom } = useScoreWeights();
+  const etfs = useMemo(
+    () => isCustom ? rescoreEtfs(rawEtfs, weights) : rawEtfs,
+    [rawEtfs, weights, isCustom],
+  );
   const strategy = useMemo(
     () => computePortfolioStrategy(profile, selectedProfile, etfs, brokerId),
     [profile, selectedProfile, etfs, brokerId]
@@ -670,7 +679,12 @@ function PurchasePlanLoader({
     );
   }
 
-  const etfs = use(etfsPromise);
+  const rawEtfs = use(etfsPromise);
+  const { weights, isCustom } = useScoreWeights();
+  const etfs = useMemo(
+    () => isCustom ? rescoreEtfs(rawEtfs, weights) : rawEtfs,
+    [rawEtfs, weights, isCustom],
+  );
   const strategy = useMemo(
     () => computePortfolioStrategy(profile, selectedProfile, etfs, brokerId),
     [profile, selectedProfile, etfs, brokerId]
