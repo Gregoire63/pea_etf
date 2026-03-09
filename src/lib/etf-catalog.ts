@@ -109,13 +109,19 @@ async function buildCatalogFromDiscovery(): Promise<BaseCatalogEntry[]> {
     //    detectCategory ne retourne plus null — les ETFs non reconnus
     //    reçoivent la catégorie "Other", ce qui permet d'inclure
     //    automatiquement tout futur ETF PEA sans modifier les patterns.
+    const seen = new Set<string>();
     const candidates = euronextEtfs
       .map((raw) => {
         const { category, index } = detectCategory(raw.name);
         const { confidence } = computePeaConfidence(raw.name, raw.isin);
         return { ...raw, category, index, confidence };
       })
-      .filter((e) => e.confidence >= 40);
+      .filter((e) => {
+        if (e.confidence < 40) return false;
+        if (seen.has(e.isin)) return false;
+        seen.add(e.isin);
+        return true;
+      });
 
     if (candidates.length === 0) {
       console.warn("[Catalog] 0 PEA candidates trouvés — fallback SEED_CATALOG");
