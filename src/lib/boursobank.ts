@@ -1,3 +1,5 @@
+import type { PricePoint } from "@/types/etf";
+
 // Note: malgré le rebranding BoursoBank, les pages bourse/trackers
 // sont toujours servies depuis boursorama.com
 const BASE = "https://www.boursorama.com";
@@ -229,5 +231,77 @@ export async function scrapeBoursobank(ticker: string): Promise<BoursobankData> 
   } catch (e: unknown) {
     result.error = e instanceof Error ? e.message : "Erreur réseau";
     return result;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Historical prices fallback (Boursorama chart API)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetches historical weekly prices from Boursorama's chart endpoint.
+ * Used as fallback when Yahoo Finance returns no data (delisted symbols).
+ *
+ * @param yahooTicker - Ticker in Yahoo format (e.g. "UIMT.PA")
+ * @param yearsBack - Number of years of history to fetch (max ~10)
+ */
+export async function fetchBoursoHistoricalPrices(
+  yahooTicker: string,
+  yearsBack: number = 5,
+): Promise<PricePoint[]> {
+  const symbol = getBoursoTicker(yahooTicker);
+  // length = nombre de points hebdomadaires (~52 par an)
+  const length = Math.min(yearsBack * 52, 520);
+
+  // Endpoint EOD (End of Day) avec period=0 (daily) — on sous-échantillonnera en weekly
+  const url = `${BASE}/bourse/action/graph/ws/GetTicksEOD?symbol=${symbol}&length=${length}&period=0&guid=`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        ...HEADERS,
+        Accept: "application/json, text/javascript, */*; q=0.01",
+        "X-Requested-With": "XMLHttpRequest",
+        Referer: `${BASE}/bourse/trackers/cours/${symbol}/`,
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!res.ok) return [];
+
+    const json = await res.json();
+
+    // Format: { d: [ { d: "2024-01-15", o: 10.5, h: 11, l: 10, c: 10.8, v: 1234 }, ... ] }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ticks: any[] = json?.d ?? [];
+    if (!Array.isArray(ticks) || ticks.length === 0) return [];
+
+    // Convertir en PricePoint et sous-échantillonner ~1 point par semaine
+    const daily: PricePoint[] = ticks
+      .filter((t) => t?.d && typeof t.c === "number" && t.c > 0)
+      .map((t) => ({
+        date: typeof t.d === "string" ? t.d.split("T")[0] : new Date(t.d).toISOString().split("T")[0],
+        close: t.c,
+      }));
+
+    if (daily.length === 0) return [];
+
+    // Sous-échantillonnage hebdomadaire : garder 1 point par semaine (le dernier jour)
+    const weekly: PricePoint[] = [];
+    let lastWeek = -1;
+    for (const p of daily) {
+      const d = new Date(p.date);
+      const week = Math.floor(d.getTime() / (7 * 86_400_000));
+      if (week !== lastWeek) {
+        weekly.push(p);
+        lastWeek = week;
+      }
+    }
+
+    console.info(`[Boursorama] ${yahooTicker} → ${weekly.length} weekly prices (fallback)`);
+    return weekly;
+  } catch (e) {
+    console.warn(`[Boursorama] Failed to fetch history for ${yahooTicker}:`, e);
+    return [];
   }
 }

@@ -1,5 +1,6 @@
 import YahooFinance from "yahoo-finance2";
 import type { PricePoint } from "@/types/etf";
+import { fetchBoursoHistoricalPrices } from "@/lib/boursobank";
 
 const yf = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
@@ -43,8 +44,9 @@ export async function fetchHistoricalPrices(
         close: q.close,
       }));
   } catch (error) {
-    console.warn(`Failed to fetch history for ${yahooTicker}:`, error);
-    return [];
+    console.warn(`Failed to fetch history for ${yahooTicker} (Yahoo):`, error);
+    // Fallback Boursorama quand Yahoo échoue (symbole delisted, pas de données, etc.)
+    return fetchBoursoHistoricalPrices(yahooTicker, yearsBack);
   }
 }
 
