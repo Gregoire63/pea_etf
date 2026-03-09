@@ -27,6 +27,10 @@ import { getBrokerById, estimateTradeFee } from "./brokers";
 
 const CURRENT_YEAR = new Date().getFullYear();
 
+/** Score minimum pour qu'un ETF soit proposé dans la stratégie.
+ *  En dessous, l'ETF est considéré trop faible (mauvais TER, perf, AUM, Sharpe ou drawdown). */
+const MIN_SCORE_THRESHOLD = 40;
+
 export type RiskProfile = "agressif" | "équilibré" | "défensif";
 export type EtfRole = "Cœur" | "Complément" | "Satellite";
 
@@ -168,6 +172,7 @@ function selectBestForSlot(
     .filter((etf) => !slot.excludeLeveraged || !etf.leveraged)
     .filter((etf) => !slot.distribution || etf.distribution === slot.distribution)
     .filter((etf) => !alreadySelected.has(etf.isin))
+    .filter((etf) => etf.score >= MIN_SCORE_THRESHOLD)
     .filter((etf) => {
       if (slot.allowedIndices) {
         return slot.allowedIndices.some((t) => etf.index.toLowerCase().includes(t.toLowerCase()));
@@ -785,10 +790,12 @@ function buildDynamicStrategy(
     let selection = selectBestForSlot(rankedEtfs, slot, alreadySelected, preferAcc, brokerId);
 
     // Fallback : si aucun ETF ne correspond aux filtres du slot,
-    // chercher le fallbackIsin dans les données disponibles
+    // chercher le fallbackIsin dans les données disponibles (même seuil de score)
     if (!selection && slot.fallbackIsin) {
       const fallback = rankedEtfs.find(
-        (e) => e.isin === slot.fallbackIsin && !alreadySelected.has(e.isin),
+        (e) => e.isin === slot.fallbackIsin
+          && !alreadySelected.has(e.isin)
+          && e.score >= MIN_SCORE_THRESHOLD,
       );
       if (fallback) {
         selection = {
@@ -841,6 +848,15 @@ function buildDynamicStrategy(
       returnInputs[i].weight = strategyEtfs[i].weight;
     }
   }
+
+  // Phase 4 : Tri par rôle (Cœur → Complément → Satellite) puis poids décroissant
+  const ROLE_ORDER: Record<EtfRole, number> = { "Cœur": 0, "Complément": 1, "Satellite": 2 };
+  strategyEtfs.sort((a, b) => {
+    const roleA = ROLE_ORDER[a.role] ?? 9;
+    const roleB = ROLE_ORDER[b.role] ?? 9;
+    if (roleA !== roleB) return roleA - roleB;
+    return b.weight - a.weight;
+  });
 
   const { min, max } = computeWeightedReturn(returnInputs, monthlyInvestment, brokerId);
 
