@@ -99,6 +99,7 @@ const CATEGORY_HISTORICAL_RETURNS: Partial<Record<EtfCategory, number>> = {
   Sector: 0.07,
   Dividend: 0.065,
   Leveraged: 0.12,
+  Other: 0.07,
 };
 
 // Volatilités historiques de référence par catégorie (pour le volatility drag)
@@ -117,6 +118,7 @@ const CATEGORY_HISTORICAL_VOL: Partial<Record<EtfCategory, number>> = {
   Sector: 0.20,
   Dividend: 0.15,
   Leveraged: 0.35,
+  Other: 0.18,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

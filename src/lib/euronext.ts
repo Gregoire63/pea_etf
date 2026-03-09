@@ -749,13 +749,16 @@ export const PEA_PROVIDERS = [
 
 export function detectCategory(
   name: string,
-): { category: EtfCategory | null; index: string | null } {
+): { category: EtfCategory; index: string } {
   for (const { pattern, category, index } of INDEX_PATTERNS) {
     if (pattern.test(name)) {
       return { category, index };
     }
   }
-  return { category: null, index: null };
+  // Aucun pattern reconnu → catégorie générique.
+  // Permet d'inclure automatiquement tout futur ETF PEA
+  // sans avoir besoin d'ajouter un pattern.
+  return { category: "Other", index: name };
 }
 
 /**
@@ -796,9 +799,10 @@ export function computePeaConfidence(
   // on Euronext Paris by a PEA provider (iShares, Invesco, SPDR have
   // dedicated PEA ranges that all use swap replication).
   const isPeaProvider = PEA_PROVIDERS.some((p) => p.test(name));
+  const isKnownCategory = category !== "Other";
+
   if (
     isin.startsWith("IE") &&
-    category &&
     !EU_HEAVY_CATEGORIES.has(category) &&
     !hasPeaKeyword &&
     !hasSwapKeyword &&
@@ -834,20 +838,20 @@ export function computePeaConfidence(
     reasons.push("Domicile IE (PEA possible si >75% actions UE)");
   }
 
-  // Catégorie reconnue (indice actions)
-  if (category && category !== "Leveraged") {
+  // Catégorie reconnue (indice actions) — "Other" et "Leveraged" n'apportent pas de bonus
+  if (isKnownCategory && category !== "Leveraged") {
     confidence += 10;
     reasons.push(`Indice actions reconnu (${category})`);
   }
 
   // Indice 100% zone euro → presque toujours PEA
-  if (category && EU_HEAVY_CATEGORIES.has(category)) {
+  if (EU_HEAVY_CATEGORIES.has(category)) {
     confidence += 10;
     reasons.push("Indice majoritairement UE");
   }
 
   // ESG/SRI/Climate versions of known indices
-  if (/\b(?:ESG|SRI|Climate|Net\s*Zero|PAB|CTB)\b/i.test(name) && category) {
+  if (/\b(?:ESG|SRI|Climate|Net\s*Zero|PAB|CTB)\b/i.test(name) && isKnownCategory) {
     confidence += 5;
     reasons.push("Variante ESG d'un indice reconnu");
   }

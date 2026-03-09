@@ -12,7 +12,8 @@ export type EtfCategory =
   | "Nordic"
   | "Sector"
   | "Dividend"
-  | "Leveraged";
+  | "Leveraged"
+  | "Other";
 
 export interface PeaEtfCatalogEntry {
   isin: string;

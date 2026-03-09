@@ -29,10 +29,10 @@ export interface DiscoveredEtf {
   name: string;
   ticker: string;
   yahooTicker: string;
-  /** Catégorie détectée automatiquement */
-  category: EtfCategory | null;
+  /** Catégorie détectée automatiquement (jamais null — "Other" si non reconnu) */
+  category: EtfCategory;
   /** Indice répliqué (détecté depuis le nom) */
-  detectedIndex: string | null;
+  detectedIndex: string;
   /** Score de confiance PEA (0-100) */
   peaConfidence: number;
   /** Raison du score de confiance */
@@ -80,7 +80,7 @@ async function enrichWithJustEtf(etfs: DiscoveredEtf[]): Promise<void> {
       etf.justEtfData = data;
 
       // Construire l'entrée catalogue suggérée
-      if (!data.error && etf.category) {
+      if (!data.error) {
         const replication = mapReplication(data.replication);
         const distribution = mapDistribution(data.distribution);
         const ter = data.ter ?? 0.003;

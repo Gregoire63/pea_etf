@@ -39,6 +39,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   Sector: "Sectoriel",
   Dividend: "Dividendes",
   Leveraged: "Levier",
+  Other: "Autre",
 };
 
 export const CATEGORY_COLORS: Record<string, string> = {
@@ -56,6 +57,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   Sector:   "bg-purple-100  text-purple-800  dark:bg-transparent dark:border-purple-500/60  dark:text-purple-400",
   Dividend: "bg-teal-100    text-teal-800    dark:bg-transparent dark:border-teal-500/60    dark:text-teal-400",
   Leveraged:"bg-rose-100    text-rose-800    dark:bg-transparent dark:border-rose-500/60    dark:text-rose-400",
+  Other:    "bg-gray-100    text-gray-800    dark:bg-transparent dark:border-gray-500/60    dark:text-gray-400",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

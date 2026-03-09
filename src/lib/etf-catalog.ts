@@ -105,14 +105,17 @@ async function buildCatalogFromDiscovery(): Promise<BaseCatalogEntry[]> {
       return SEED_CATALOG;
     }
 
-    // 2. Filtrer les PEA candidates avec catégorie reconnue
+    // 2. Filtrer les PEA candidates (confiance >= 40)
+    //    detectCategory ne retourne plus null — les ETFs non reconnus
+    //    reçoivent la catégorie "Other", ce qui permet d'inclure
+    //    automatiquement tout futur ETF PEA sans modifier les patterns.
     const candidates = euronextEtfs
       .map((raw) => {
         const { category, index } = detectCategory(raw.name);
         const { confidence } = computePeaConfidence(raw.name, raw.isin);
         return { ...raw, category, index, confidence };
       })
-      .filter((e) => e.confidence >= 40 && e.category !== null);
+      .filter((e) => e.confidence >= 40);
 
     if (candidates.length === 0) {
       console.warn("[Catalog] 0 PEA candidates trouvés — fallback SEED_CATALOG");
@@ -148,7 +151,7 @@ async function buildCatalogFromDiscovery(): Promise<BaseCatalogEntry[]> {
         catalog.push({
           isin: c.isin,
           yahooTicker,
-          category: c.category!,
+          category: c.category,
           index: c.index ?? c.name,
           ter: jtf.ter ?? 0.003,
           distribution: mapDistribution(jtf.distribution),
